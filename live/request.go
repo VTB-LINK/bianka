@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slog"
 )
 
 const (
@@ -56,12 +58,18 @@ func (resp BaseResp) Success() bool {
 }
 
 type Client struct {
-	rCfg *RoomConfig
+	rCfg   *RoomConfig
+	logger *slog.Logger
 }
 
-func NewClient(rCfg *RoomConfig) *Client {
+func NewClient(rCfg *RoomConfig, logger *slog.Logger) *Client {
+	if logger == nil {
+		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	}
+
 	return &Client{
-		rCfg: rCfg,
+		rCfg:   rCfg,
+		logger: logger,
 	}
 }
 
@@ -70,19 +78,17 @@ type WebSocketInfo struct {
 	AuthBody string `json:"auth_body"`
 	//  wss 长连地址
 	WssLink []string `json:"wss_link"`
-	// 主播信息
-	AnchorInfo AnchorInfo `json:"anchor_info"`
 }
 
 type AnchorInfo struct {
-	RoomId int    `json:"room_id"`
+	RoomID int    `json:"room_id"`
 	Uname  string `json:"uname"`
 	UFace  string `json:"uface"`
 	Uid    int    `json:"uid"`
 }
 
 type GameInfo struct {
-	GameId string `json:"game_id"`
+	GameID string `json:"game_id"`
 }
 
 type StartAppRequest struct {
@@ -93,6 +99,8 @@ type StartAppRequest struct {
 }
 
 type StartAppRespData struct {
+	// 主播信息
+	AnchorInfo AnchorInfo `json:"anchor_info"`
 	// 场次信息
 	GameInfo GameInfo `json:"game_info"`
 	// 长连信息
@@ -102,7 +110,7 @@ type StartAppRespData struct {
 // StartApp 启动app
 func (c *Client) StartApp() (*StartAppRespData, error) {
 	startAppReq := StartAppRequest{
-		Code:  c.rCfg.IdCode,
+		Code:  c.rCfg.IDCode,
 		AppID: c.rCfg.AppID,
 	}
 
@@ -134,7 +142,7 @@ type EndAppRequest struct {
 // EndApp 关闭app
 func (c *Client) EndApp(startResp *StartAppRespData) error {
 	endAppReq := EndAppRequest{
-		GameId: startResp.GameInfo.GameId,
+		GameId: startResp.GameInfo.GameID,
 		AppId:  c.rCfg.AppID,
 	}
 
@@ -152,7 +160,10 @@ func (c *Client) EndApp(startResp *StartAppRespData) error {
 }
 
 func (c *Client) StartWebsocket(startResp *StartAppRespData, dispatcherHandleMap map[uint32]DispatcherHandle) (*WsClient, error) {
-	wc := NewWsClient(c.rCfg, dispatcherHandleMap)
+	wc := NewWsClient(c.rCfg, dispatcherHandleMap, c.logger.With(
+		slog.Int("uid", startResp.AnchorInfo.Uid),
+		slog.Int("room_id", startResp.AnchorInfo.RoomID),
+	))
 
 	if err := wc.Dial(startResp.WebsocketInfo.WssLink); err != nil {
 		return nil, err
@@ -178,7 +189,6 @@ func (c *Client) ApiRequest(reqJson, requestUrl string) (*BaseResp, error) {
 		Timestamp:         strconv.FormatInt(time.Now().Unix(), 10),
 		SignatureMethod:   HmacSha256,
 		SignatureVersion:  BiliVersion,
-		Authorization:     "",
 		Nonce:             strconv.FormatInt(time.Now().UnixNano(), 10), //用于幂等,记得替换
 		AccessKeyID:       c.rCfg.AccessKey,
 		ContentMD5:        Md5(reqJson),
@@ -193,27 +203,25 @@ func (c *Client) ApiRequest(reqJson, requestUrl string) (*BaseResp, error) {
 		Post(fmt.Sprintf("%s%s", c.rCfg.OpenPlatformHttpHost, requestUrl))
 
 	if err != nil {
-		return nil, errors.Wrapf(err, "request fail, url:%s req: %v", requestUrl, reqJson)
+		return nil, errors.Wrapf(err, "request fail, url:%s body: %s", requestUrl, reqJson)
 	}
 
-	if resp.StatusCode() >= http.StatusAccepted {
+	if resp.StatusCode() >= http.StatusBadRequest {
 		return nil, errors.Wrapf(err, "request response not ok, url:%s req: %v code:%d", requestUrl, reqJson, resp.StatusCode())
 	}
 
 	if !result.Success() {
-		return nil, fmt.Errorf("bilbil response code not ok, url:%s req: %v resp:%v", requestUrl, reqJson, result)
+		return &result, errors.Wrapf(BilbilRequestFailed, "bilbil response code not ok, url:%s body: %s result: %v", requestUrl, reqJson, result)
 	}
 
 	return &result, nil
 }
 
-// CreateSignature 生成Authorization加密串
 func CreateSignature(header *CommonHeader, accessKeySecret string) string {
 	sStr := header.ToSortedString()
 	return HmacSHA256(accessKeySecret, sStr)
 }
 
-// Md5 md5加密
 func Md5(str string) (md5str string) {
 	data := []byte(str)
 	has := md5.Sum(data)
@@ -221,7 +229,6 @@ func Md5(str string) (md5str string) {
 	return md5str
 }
 
-// HmacSHA256 HMAC-SHA256算法
 func HmacSHA256(key string, data string) string {
 	mac := hmac.New(sha256.New, []byte(key))
 	mac.Write([]byte(data))
@@ -243,7 +250,7 @@ func (h *CommonHeader) ToMap() map[string]string {
 	}
 }
 
-// ToSortMap 参与加密的字段转map<string, string>
+// ToSortMap 参与签名的字段转map<string, string>
 func (h *CommonHeader) ToSortMap() map[string]string {
 	return map[string]string{
 		BiliTimestampHeader:       h.Timestamp,
@@ -255,7 +262,6 @@ func (h *CommonHeader) ToSortMap() map[string]string {
 	}
 }
 
-// ToSortedString 生成需要加密的文本
 func (h *CommonHeader) ToSortedString() (sign string) {
 	hMap := h.ToSortMap()
 	var hSil []string

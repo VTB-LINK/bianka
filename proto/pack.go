@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
-	"errors"
+	stderr "errors"
 	"fmt"
 	"io"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -18,11 +20,15 @@ const (
 	OperationOffset = 8
 	SequenceOffset  = 12
 
-	BodyProtocolVersionNormal  = 0
-	BodyProtocolDeflateVersion = 2
-	HeaderDefaultVersion       = 1
-	HeaderDefaultOperation     = 1
-	HeaderDefaultSequence      = 1
+	BodyProtocolVersionNormal = 0
+	BodyProtocolVersionZlib   = 2
+	HeaderDefaultVersion      = 1
+	HeaderDefaultOperation    = 1
+	HeaderDefaultSequence     = 1
+)
+
+var (
+	PackLengthError = stderr.New("pack length error")
 )
 
 func PackHeader(sequenceID, packLength, operation uint32) Header {
@@ -37,7 +43,7 @@ func PackHeader(sequenceID, packLength, operation uint32) Header {
 
 func UnpackHeader(head []byte) (Header, error) {
 	if len(head) != PackageHeaderTotalLength {
-		return Header{}, errors.New(fmt.Sprintf("parse header fail, head length is [%d], expected length is [%d]", len(head), PackageHeaderTotalLength))
+		return Header{}, errors.Wrapf(PackLengthError, fmt.Sprintf("parse header fail, head length is [%d], expected length is [%d]", len(head), PackageHeaderTotalLength))
 	}
 
 	return Header{
@@ -55,27 +61,30 @@ func UnpackMessage(raw []byte) ([]Message, error) {
 	messages := make([]Message, 0, 8)
 
 	if len(raw) <= PackageHeaderTotalLength {
-		return messages, errors.New(fmt.Sprintf("packet defect, raw length [%d]", len(raw)))
+		return messages, errors.Wrapf(PackLengthError, fmt.Sprintf("packet defect, raw length [%d]", len(raw)))
 	}
 
 	head, err := UnpackHeader(raw[:PackageHeaderTotalLength])
 	if err != nil {
 		return messages, err
 	} else if int(head.PackLength) > len(raw) {
-		return messages, errors.New(fmt.Sprintf("packet defect, raw length [%d], expected length is [%d]", len(raw), head.PackLength))
+		return messages, errors.Wrapf(PackLengthError, fmt.Sprintf("packet defect, raw length [%d], expected length is [%d]", len(raw), head.PackLength))
 	}
 
 	// unzlib
 	// see https://open-live.bilibili.com/document/657d8e34-f926-a133-16c0-300c1afc6e6b
-	if head.Version == BodyProtocolDeflateVersion {
+	if head.Version == BodyProtocolVersionZlib {
 		reader, err := zlib.NewReader(bytes.NewReader(raw[PackageHeaderTotalLength:]))
 		if err != nil {
-			return messages, fmt.Errorf("unzlib fail, %w", err)
+			return messages, errors.Wrap(err, "new zlib reader fail")
 		}
-		defer reader.Close()
+
+		if err := reader.Close(); err != nil {
+			return messages, errors.Wrap(err, "close zlib reader fail")
+		}
 
 		if raw, err = io.ReadAll(reader); err != nil {
-			return messages, err
+			return messages, errors.Wrapf(err, "read zlib fail, raw: %s", raw)
 		}
 	}
 
@@ -84,12 +93,11 @@ func UnpackMessage(raw []byte) ([]Message, error) {
 		if err != nil {
 			return messages, err
 		} else if int(head.PackLength) > len(raw) {
-			return messages, errors.New(fmt.Sprintf("packet defect, raw length [%d], expected length is [%d]", len(raw), head.PackLength))
+			return messages, errors.Wrapf(PackLengthError, fmt.Sprintf("packet defect, raw length [%d], expected length is [%d]", len(raw), head.PackLength))
 		}
 
-		// dereference
-		payload := make([]byte, 0)
-		payload = append(payload, raw[head.HeadLength:head.PackLength]...)
+		payload := make([]byte, len(raw[head.HeadLength:head.PackLength]))
+		copy(payload, raw[head.HeadLength:head.PackLength])
 
 		messages = append(messages, Message{
 			header:  head,
