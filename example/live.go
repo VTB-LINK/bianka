@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"vlink.dev/vtb-live/bianka/live"
-	"vlink.dev/vtb-live/bianka/proto"
+	"github.com/vtb-link/bianka/live"
+	"github.com/vtb-link/bianka/proto"
 )
 
 var rCfg = live.NewConfig(

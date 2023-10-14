@@ -32,7 +32,7 @@
 
 ## 安装
 ```shell
-  go get vlink.dev/vtb-live/bianka
+  go get github.com/vtb-link/bianka
 ```
 
 ## 快速开始
@@ -50,8 +50,8 @@ import (
 	"syscall"
 	"time"
 
-	"vlink.dev/vtb-live/bianka/live"
-	"vlink.dev/vtb-live/bianka/proto"
+	"github.com/vtb-link/bianka/live"
+	"github.com/vtb-link/bianka/proto"
 )
 
 func messageHandle(msg *proto.Message) error {
@@ -171,7 +171,7 @@ import (
 	"log"
 	"net/http"
 
-	"vlink.dev/vtb-live/bianka/live"
+	"github.com/vtb-link/bianka/live"
 )
 
 const (
@@ -219,7 +219,7 @@ bianka 既提供高级封装，也提供了低级封装，如果你需要自定�
 package main
 
 import (
-    "vlink.dev/vtb-live/bianka/proto"
+    "github.com/vtb-link/bianka/proto"
 )
 
 func main() {

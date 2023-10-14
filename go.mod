@@ -1,4 +1,4 @@
-module vlink.dev/vtb-live/bianka
+module github.com/vtb-link/bianka
 
 go 1.20
 
