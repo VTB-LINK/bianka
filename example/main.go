@@ -1,36 +1,38 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"vlink.dev/vtb-live/bianca-danmu/live"
-	"vlink.dev/vtb-live/bianca-danmu/proto"
+	"vlink.dev/vtb-live/bianka/live"
+	"vlink.dev/vtb-live/bianka/proto"
 )
 
-var rCfg = live.RoomConfig{
-	AccessKey:            "申请的key",
-	AccessKeySecret:      "申请的secret",
-	OpenPlatformHttpHost: "https://live-open.biliapi.com", //开放平台 (线上环境)
-	IDCode:               "开播主播的身份码",
-	AppID:                0, // 应用id
-}
+var rCfg = live.NewConfig(
+	"申请的key",
+	"申请的secret",
+	0, // 应用id
+)
+
+var code = "主播的code" // 身份码 也叫 idCode
 
 func main() {
-	liveClient := live.NewClient(&rCfg, nil)
+	liveClient := live.NewClient(rCfg)
 
-	startResp, err := liveClient.StartApp()
+	startResp, err := liveClient.AppStart(code)
 	if err != nil {
 		panic(err)
 	}
 
-	defer liveClient.EndApp(startResp)
+	defer liveClient.AppEnd(startResp.GameInfo.GameID)
 
 	wcs, err := liveClient.StartWebsocket(startResp, map[uint32]live.DispatcherHandle{
 		proto.OperationMessage: messageHandle,
+	}, func(startResp *live.AppStartResponse) {
+		// 注册关闭回调
+		log.Println("WebsocketClient onClose", startResp)
 	})
 
 	if err != nil {
@@ -57,7 +59,7 @@ func main() {
 
 func messageHandle(msg *proto.Message) error {
 	// 单条消息raw
-	fmt.Println(string(msg.Payload()))
+	log.Println(string(msg.Payload()))
 
 	// 自动解析
 	cmd, data, err := live.AutomaticParsingMessageCommand(msg.Payload())
@@ -68,13 +70,13 @@ func messageHandle(msg *proto.Message) error {
 	// Switch cmd
 	switch cmd {
 	case live.CmdLiveOpenPlatformDanmu:
-		fmt.Println(cmd, data.(*live.CmdLiveOpenPlatformDanmuData))
+		log.Println(cmd, data.(*live.CmdLiveOpenPlatformDanmuData))
 	}
 
 	// Switch data type
 	switch v := data.(type) {
 	case *live.CmdLiveOpenPlatformGuardData:
-		fmt.Println(cmd, v)
+		log.Println(cmd, v)
 	}
 
 	return nil

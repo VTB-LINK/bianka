@@ -1,116 +1,49 @@
 package live
 
 import (
-	"crypto/hmac"
-	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
-	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/slog"
 )
 
 const (
-	AcceptHeader              = "Accept"
-	ContentTypeHeader         = "Content-Type"
-	AuthorizationHeader       = "Authorization"
-	JsonType                  = "application/json"
-	BiliVersion               = "1.0"
-	HmacSha256                = "HMAC-SHA256"
-	BiliTimestampHeader       = "x-bili-timestamp"
-	BiliSignatureMethodHeader = "x-bili-signature-method"
-	BiliSignatureNonceHeader  = "x-bili-signature-nonce"
-	BiliAccessKeyIdHeader     = "x-bili-accesskeyid"
-	BiliSignVersionHeader     = "x-bili-signature-version"
-	BiliContentMD5Header      = "x-bili-content-md5"
+	HostProdLiveOpen = "https://live-open.biliapi.com" //开放平台 (线上环境)
 )
 
-type CommonHeader struct {
-	ContentType       string
-	ContentAcceptType string
-	Timestamp         string
-	SignatureMethod   string
-	SignatureVersion  string
-	Authorization     string
-	Nonce             string
-	AccessKeyID       string
-	ContentMD5        string
+type Config struct {
+	AccessKey            string //access_key
+	AccessKeySecret      string //access_key_secret
+	OpenPlatformHttpHost string //开放平台 (线上环境)
+	AppID                int64  // 应用id
 }
 
-type BaseResp struct {
-	Code      int64           `json:"code"`
-	Message   string          `json:"message"`
-	RequestId string          `json:"request_id"`
-	Data      json.RawMessage `json:"data"`
-}
-
-func (resp BaseResp) Success() bool {
-	return resp.Code == 0
+func NewConfig(accessKey, accessKeySecret string, appID int64) *Config {
+	return &Config{
+		AccessKey:            accessKey,
+		AccessKeySecret:      accessKeySecret,
+		OpenPlatformHttpHost: HostProdLiveOpen,
+		AppID:                appID,
+	}
 }
 
 type Client struct {
-	rCfg   *RoomConfig
-	logger *slog.Logger
+	rCfg *Config
 }
 
-func NewClient(rCfg *RoomConfig, logger *slog.Logger) *Client {
-	if logger == nil {
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	}
-
+func NewClient(rCfg *Config) *Client {
 	return &Client{
-		rCfg:   rCfg,
-		logger: logger,
+		rCfg: rCfg,
 	}
 }
 
-type WebSocketInfo struct {
-	//  长连使用的请求json体 第三方无需关注内容,建立长连时使用即可
-	AuthBody string `json:"auth_body"`
-	//  wss 长连地址
-	WssLink []string `json:"wss_link"`
-}
-
-type AnchorInfo struct {
-	RoomID int    `json:"room_id"`
-	Uname  string `json:"uname"`
-	UFace  string `json:"uface"`
-	Uid    int    `json:"uid"`
-}
-
-type GameInfo struct {
-	GameID string `json:"game_id"`
-}
-
-type StartAppRequest struct {
-	// 主播身份码
-	Code string `json:"code"`
-	// 项目id
-	AppID int64 `json:"app_id"`
-}
-
-type StartAppRespData struct {
-	// 主播信息
-	AnchorInfo AnchorInfo `json:"anchor_info"`
-	// 场次信息
-	GameInfo GameInfo `json:"game_info"`
-	// 长连信息
-	WebsocketInfo WebSocketInfo `json:"websocket_info"`
-}
-
-// StartApp 启动app
-func (c *Client) StartApp() (*StartAppRespData, error) {
-	startAppReq := StartAppRequest{
-		Code:  c.rCfg.IDCode,
+// AppStart 启动app
+func (c *Client) AppStart(code string) (*AppStartResponse, error) {
+	startAppReq := AppStartRequest{
+		Code:  code,
 		AppID: c.rCfg.AppID,
 	}
 
@@ -119,12 +52,12 @@ func (c *Client) StartApp() (*StartAppRespData, error) {
 		err = errors.Wrap(err, "json marshal fail")
 	}
 
-	resp, err := c.ApiRequest(string(reqJson), "/v2/app/start")
+	resp, err := c.doRequest(string(reqJson), "/v2/app/start")
 	if err != nil {
-		return nil, err
+		return nil, errors.WithMessage(err, "start app fail")
 	}
 
-	startAppRespData := &StartAppRespData{}
+	startAppRespData := &AppStartResponse{}
 	if err = json.Unmarshal(resp.Data, &startAppRespData); err != nil {
 		return nil, errors.Wrapf(err, "json unmarshal fail, data:%s", resp.Data)
 	}
@@ -132,18 +65,11 @@ func (c *Client) StartApp() (*StartAppRespData, error) {
 	return startAppRespData, nil
 }
 
-type EndAppRequest struct {
-	// 场次id
-	GameId string `json:"game_id"`
-	// 项目id
-	AppId int64 `json:"app_id"`
-}
-
-// EndApp 关闭app
-func (c *Client) EndApp(startResp *StartAppRespData) error {
-	endAppReq := EndAppRequest{
-		GameId: startResp.GameInfo.GameID,
-		AppId:  c.rCfg.AppID,
+// AppEnd 关闭app
+func (c *Client) AppEnd(gameID string) error {
+	endAppReq := AppEndRequest{
+		GameID: gameID,
+		AppID:  c.rCfg.AppID,
 	}
 
 	reqJson, err := json.Marshal(endAppReq)
@@ -151,127 +77,122 @@ func (c *Client) EndApp(startResp *StartAppRespData) error {
 		err = errors.Wrap(err, "json marshal fail")
 	}
 
-	_, err = c.ApiRequest(string(reqJson), "/v2/app/end")
+	_, err = c.doRequest(string(reqJson), "/v2/app/end")
 	if err != nil {
-		return err
+		return errors.WithMessage(err, "end app fail")
 	}
 
 	return nil
 }
 
-func (c *Client) StartWebsocket(startResp *StartAppRespData, dispatcherHandleMap map[uint32]DispatcherHandle) (*WsClient, error) {
-	wc := NewWsClient(c.rCfg, dispatcherHandleMap, c.logger.With(
-		slog.Int("uid", startResp.AnchorInfo.Uid),
-		slog.Int("room_id", startResp.AnchorInfo.RoomID),
-	))
+// AppHeartbeat 心跳
+func (c *Client) AppHeartbeat(gameID string) error {
+	heartbeatReq := AppHeartbeatRequest{
+		GameID: gameID,
+	}
+
+	reqJson, err := json.Marshal(heartbeatReq)
+	if err != nil {
+		err = errors.Wrap(err, "json marshal fail")
+	}
+
+	_, err = c.doRequest(string(reqJson), "/v2/app/heartbeat")
+	if err != nil {
+		return errors.WithMessage(err, "heartbeat fail")
+	}
+
+	return nil
+}
+
+// AppBatchHeartbeat 批量心跳
+func (c *Client) AppBatchHeartbeat(gameIDs []string) (*AppBatchHeartbeatResponse, error) {
+	heartbeatReq := AppBatchHeartbeatRequest{
+		GameIDs: gameIDs,
+	}
+
+	reqJson, err := json.Marshal(heartbeatReq)
+	if err != nil {
+		err = errors.Wrap(err, "json marshal fail")
+	}
+
+	resp, err := c.doRequest(string(reqJson), "/v2/app/batchHeartbeat")
+	if err != nil {
+		return nil, errors.WithMessage(err, "heartbeat fail")
+	}
+
+	heartbeatResp := &AppBatchHeartbeatResponse{}
+	if err = json.Unmarshal(resp.Data, &heartbeatResp); err != nil {
+		return nil, errors.Wrapf(err, "json unmarshal fail, data:%s", resp.Data)
+	}
+
+	return heartbeatResp, nil
+}
+
+// StartWebsocket 启动websocket
+// 此方法会一键完成鉴权，心跳，消息分发
+func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, onCloseFunc func(startResp *AppStartResponse)) (*WsClient, error) {
+	wc := NewWsClient(
+		startResp,
+		dispatcherHandleMap,
+		nil).
+		WithOnClose(onCloseFunc)
 
 	if err := wc.Dial(startResp.WebsocketInfo.WssLink); err != nil {
 		return nil, err
 	}
 
-	if err := wc.SendAuth(startResp.WebsocketInfo.AuthBody); err != nil {
+	if err := wc.SendAuth(); err != nil {
 		return nil, err
 	}
 
-	// 读取信息
-	go wc.ReadMsg()
-	// 处理事件
-	go wc.EventLoop()
-
+	wc.Run()
 	return wc, nil
 }
 
-// ApiRequest http request demo方法
-func (c *Client) ApiRequest(reqJson, requestUrl string) (*BaseResp, error) {
+func (c *Client) doRequest(reqJson, reqPath string) (*BaseResp, error) {
+	return c.DoRequest(reqJson, reqPath, strconv.FormatInt(time.Now().UnixNano(), 10))
+}
+
+// DoRequest 发起请求
+// 用于用户自定义请求
+func (c *Client) DoRequest(reqJson, reqPath, nonce string) (*BaseResp, error) {
 	header := &CommonHeader{
 		ContentType:       JsonType,
 		ContentAcceptType: JsonType,
 		Timestamp:         strconv.FormatInt(time.Now().Unix(), 10),
 		SignatureMethod:   HmacSha256,
 		SignatureVersion:  BiliVersion,
-		Nonce:             strconv.FormatInt(time.Now().UnixNano(), 10), //用于幂等,记得替换
+		Nonce:             nonce, //用于幂等
 		AccessKeyID:       c.rCfg.AccessKey,
 		ContentMD5:        Md5(reqJson),
 	}
-	header.Authorization = CreateSignature(header, c.rCfg.AccessKeySecret)
+	header.Authorization = header.CreateSignature(c.rCfg.AccessKeySecret)
 
 	result := BaseResp{}
 	resp, err := resty.New().R().
 		SetHeaders(header.ToMap()).
 		SetBody(reqJson).
 		SetResult(&result).
-		Post(fmt.Sprintf("%s%s", c.rCfg.OpenPlatformHttpHost, requestUrl))
+		Post(c.rCfg.OpenPlatformHttpHost + reqPath)
 
 	if err != nil {
-		return nil, errors.Wrapf(err, "request fail, url:%s body: %s", requestUrl, reqJson)
+		return nil, errors.Wrapf(err, "request fail, url:%s body: %s", reqPath, reqJson)
 	}
 
 	if resp.StatusCode() >= http.StatusBadRequest {
-		return nil, errors.Wrapf(err, "request response not ok, url:%s req: %v code:%d", requestUrl, reqJson, resp.StatusCode())
+		return nil, errors.Wrapf(BilibiliRequestFailed, "request response not ok, url:%s req: %v code:%d", reqPath, reqJson, resp.StatusCode())
 	}
 
 	if !result.Success() {
-		return &result, errors.Wrapf(BilbilRequestFailed, "bilbil response code not ok, url:%s body: %s result: %v", requestUrl, reqJson, result)
+		return &result, errors.Wrapf(BilibiliResponseNotSuccess, "bilbil response code not ok, url:%s  body: %s result: %v", reqPath, reqJson, result)
 	}
 
 	return &result, nil
 }
 
-func CreateSignature(header *CommonHeader, accessKeySecret string) string {
-	sStr := header.ToSortedString()
-	return HmacSHA256(accessKeySecret, sStr)
-}
+// VerifyH5RequestSignature 验证h5请求签名
+func (c *Client) VerifyH5RequestSignature(req *http.Request) bool {
+	h5sp := ParseH5SignatureParamsWithRequest(req)
 
-func Md5(str string) (md5str string) {
-	data := []byte(str)
-	has := md5.Sum(data)
-	md5str = fmt.Sprintf("%x", has)
-	return md5str
-}
-
-func HmacSHA256(key string, data string) string {
-	mac := hmac.New(sha256.New, []byte(key))
-	mac.Write([]byte(data))
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
-// ToMap 所有字段转map<string, string>
-func (h *CommonHeader) ToMap() map[string]string {
-	return map[string]string{
-		BiliTimestampHeader:       h.Timestamp,
-		BiliSignatureMethodHeader: h.SignatureMethod,
-		BiliSignatureNonceHeader:  h.Nonce,
-		BiliAccessKeyIdHeader:     h.AccessKeyID,
-		BiliSignVersionHeader:     h.SignatureVersion,
-		BiliContentMD5Header:      h.ContentMD5,
-		AuthorizationHeader:       h.Authorization,
-		ContentTypeHeader:         h.ContentType,
-		AcceptHeader:              h.ContentAcceptType,
-	}
-}
-
-// ToSortMap 参与签名的字段转map<string, string>
-func (h *CommonHeader) ToSortMap() map[string]string {
-	return map[string]string{
-		BiliTimestampHeader:       h.Timestamp,
-		BiliSignatureMethodHeader: h.SignatureMethod,
-		BiliSignatureNonceHeader:  h.Nonce,
-		BiliAccessKeyIdHeader:     h.AccessKeyID,
-		BiliSignVersionHeader:     h.SignatureVersion,
-		BiliContentMD5Header:      h.ContentMD5,
-	}
-}
-
-func (h *CommonHeader) ToSortedString() (sign string) {
-	hMap := h.ToSortMap()
-	var hSil []string
-	for k := range hMap {
-		hSil = append(hSil, k)
-	}
-	sort.Strings(hSil)
-	for _, v := range hSil {
-		sign += v + ":" + hMap[v] + "\n"
-	}
-	sign = strings.TrimRight(sign, "\n")
-	return
+	return h5sp.ValidateSignature(c.rCfg.AccessKeySecret)
 }

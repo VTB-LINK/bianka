@@ -2,7 +2,6 @@ package live
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -10,43 +9,55 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slog"
-	"vlink.dev/vtb-live/bianca-danmu/proto"
+	"vlink.dev/vtb-live/bianka/proto"
 )
 
-type RoomConfig struct {
-	AccessKey            string //access_key
-	AccessKeySecret      string //access_key_secret
-	OpenPlatformHttpHost string //开放平台 (线上环境)
-	IDCode               string // 主播身份码
-	AppID                int64  // 应用id
+// DefaultLoggerGenerator 默认日志生成器
+// 如果不设置，会使用 slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+var DefaultLoggerGenerator = func() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
 type DispatcherHandle func(msg *proto.Message) error
 
 type WsClient struct {
-	conn *websocket.Conn
-	rCfg *RoomConfig
-
-	once       sync.Once
-	closeChan  chan struct{}
-	msgChan    chan *proto.Message
-	dispatcher map[uint32]DispatcherHandle
-
-	authed bool
-
 	logger *slog.Logger
+	conn   *websocket.Conn // 实际的链接
+
+	msgChan    chan *proto.Message         // 消息队列
+	dispatcher map[uint32]DispatcherHandle // 调度器
+
+	startResp *AppStartResponse // 启动app的返回信息
+	authed    bool              // 是否已经鉴权
+
+	onClose   func(startResp *AppStartResponse) // 关闭回调
+	once      sync.Once
+	closeChan chan struct{}
+	isClose   bool
 }
 
-func NewWsClient(rCfg *RoomConfig, dispatcherHandleMap map[uint32]DispatcherHandle, logger *slog.Logger) *WsClient {
+func (wc *WsClient) WithOnClose(onClose func(startResp *AppStartResponse)) *WsClient {
+	wc.onClose = onClose
+	return wc
+}
+
+func NewWsClient(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, logger *slog.Logger) *WsClient {
 	if logger == nil {
-		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		logger = DefaultLoggerGenerator()
 	}
 
+	logger.With(
+		slog.Int("uid", startResp.AnchorInfo.Uid),
+		slog.Int("room_id", startResp.AnchorInfo.RoomID),
+	)
+
 	return (&WsClient{
-		rCfg:      rCfg,
-		closeChan: make(chan struct{}),
+		logger: logger,
+
+		startResp: startResp,
+
 		msgChan:   make(chan *proto.Message, 1024),
-		logger:    logger.WithGroup("WebsocketClient"),
+		closeChan: make(chan struct{}),
 	}).initDispatcherHandleMap(dispatcherHandleMap)
 }
 
@@ -67,7 +78,12 @@ func (wc *WsClient) Close() error {
 	var err error
 	wc.once.Do(func() {
 		close(wc.closeChan)
+		wc.isClose = true
+
 		err = wc.conn.Close()
+		if wc.onClose != nil {
+			wc.onClose(wc.startResp)
+		}
 	})
 
 	return err
@@ -79,6 +95,7 @@ func (wc *WsClient) Dial(links []string) error {
 	for _, link := range links {
 		wc.conn, _, err = websocket.DefaultDialer.Dial(link, nil)
 		if err != nil {
+			wc.logger.Error("websocket dial fail", slog.String("link", link), slog.String("err", err.Error()))
 			continue
 		}
 		break
@@ -92,12 +109,12 @@ func (wc *WsClient) Dial(links []string) error {
 	return nil
 }
 
-// EventLoop 处理事件
-func (wc *WsClient) EventLoop() {
+// eventLoop 处理事件
+func (wc *WsClient) eventLoop() {
 	defer wc.logger.Info("ws event loop stop")
 
 	ticker := time.NewTicker(time.Second * 15)
-	tr := time.NewTimer(time.Second * 5)
+	tr := time.NewTimer(time.Second * 10)
 	for {
 		select {
 		case <-wc.closeChan:
@@ -105,11 +122,10 @@ func (wc *WsClient) EventLoop() {
 		case <-tr.C:
 			if !wc.authed {
 				wc.logger.Error("auth timeout")
-				_ = wc.Close()
 				return
 			}
 		case <-ticker.C:
-			wc.logger.Info("ws send heartbeat")
+			wc.logger.Debug("ws send heartbeat")
 			if err := wc.SendHeartbeat(); err != nil {
 				wc.logger.Error("send heartbeat fail", slog.String("err", err.Error()))
 			}
@@ -128,46 +144,48 @@ func (wc *WsClient) EventLoop() {
 	}
 }
 
-// ReadMsg 读取信息
-func (wc *WsClient) ReadMsg() {
+func (wc *WsClient) readMessage() {
 	defer wc.logger.Info("ws read stop")
+	defer wc.Close()
 
 	for {
-		select {
-		case <-wc.closeChan:
+		// 读取err or read close message 会导致关闭链接
+		msgType, buf, err := wc.conn.ReadMessage()
+		if err != nil {
+			if !wc.isClose {
+				wc.logger.Error("read message fail", slog.String("err", errors.Wrapf(err, "msg_type:%d", msgType).Error()))
+			}
 			return
-		default:
-			// 读取err or read close message 会导致关闭链接
-			msgType, buf, err := wc.conn.ReadMessage()
-			if err != nil {
-				wc.logger.Error("read message fail", slog.String("err", err.Error()))
-				_ = wc.Close()
-				return
-			} else if msgType == websocket.CloseMessage {
-				wc.logger.Error("read message fail", slog.String("err", "read close message"))
-				_ = wc.Close()
-				return
-			} else if msgType == websocket.PongMessage || msgType == websocket.PingMessage {
-				wc.logger.Info("read message", slog.String("msg_type", "ping/pong"))
-				continue
-			}
+		} else if msgType == websocket.CloseMessage {
+			wc.logger.Info("read message close", slog.Int("msg_type", msgType))
+			return
+		} else if msgType == websocket.PongMessage || msgType == websocket.PingMessage {
+			wc.logger.Debug("read message", slog.String("msg_type", "ping/pong"))
+			continue
+		}
 
-			msgList, err := proto.UnpackMessage(buf)
-			if err != nil {
-				wc.logger.Error("unpack message fail", slog.String("err", err.Error()))
-				continue
-			}
+		msgList, err := proto.UnpackMessage(buf)
+		if err != nil {
+			wc.logger.Error("unpack message fail", slog.String("err", err.Error()))
+			continue
+		}
 
-			for _, msg := range msgList {
-				wc.msgChan <- &msg
-			}
+		for _, msg := range msgList {
+			wc.msgChan <- &msg
 		}
 	}
 }
 
+func (wc *WsClient) Run() {
+	// 读取信息
+	go wc.readMessage()
+	// 处理事件
+	go wc.eventLoop()
+}
+
 // SendAuth 发送鉴权信息
-func (wc *WsClient) SendAuth(authBody string) error {
-	return wc.SendMessage(proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationUserAuthentication, []byte(authBody)))
+func (wc *WsClient) SendAuth() error {
+	return wc.SendMessage(proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationUserAuthentication, []byte(wc.startResp.WebsocketInfo.AuthBody)))
 }
 
 // SendMessage 发送消息
@@ -185,10 +203,6 @@ func (wc *WsClient) SendHeartbeat() error {
 	return wc.SendMessage(proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationHeartbeat, nil))
 }
 
-type AuthRespParam struct {
-	Code int64 `json:"code,omitempty"`
-}
-
 // authResp  认证结果
 func (wc *WsClient) authResp(msg *proto.Message) error {
 	defer func() {
@@ -198,14 +212,13 @@ func (wc *WsClient) authResp(msg *proto.Message) error {
 		}
 	}()
 
-	resp := &AuthRespParam{}
-
+	resp := &CmdLiveOpenPlatformAuthData{}
 	if err := json.Unmarshal(msg.Payload(), resp); err != nil {
 		return errors.Wrapf(err, "json unmarshal fail. payload:%s", msg.Payload())
 	}
 
-	if resp.Code != 0 {
-		return errors.New(fmt.Sprintf("auth fail. code:%d", resp.Code))
+	if !resp.Success() {
+		return errors.Wrapf(BilibiliWebsocketAuthFailed, "auth fail. code:%d", resp.Code)
 	}
 
 	wc.logger.Info("auth success")
@@ -215,6 +228,6 @@ func (wc *WsClient) authResp(msg *proto.Message) error {
 
 // heartBeatResp  心跳结果
 func (wc *WsClient) heartBeatResp(msg *proto.Message) (err error) {
-	wc.logger.Info("heartbeat success", slog.String("payload", string(msg.Payload())))
+	wc.logger.Debug("heartbeat success")
 	return
 }

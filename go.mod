@@ -1,4 +1,4 @@
-module vlink.dev/vtb-live/bianca-danmu
+module vlink.dev/vtb-live/bianka
 
 go 1.20
 

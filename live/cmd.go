@@ -169,3 +169,11 @@ type CmdLiveOpenPlatformLikeData struct {
 	MsgID                  string `json:"msg_id"`
 	RoomID                 int    `json:"room_id"`
 }
+
+type CmdLiveOpenPlatformAuthData struct {
+	Code int64 `json:"code,omitempty"`
+}
+
+func (arp CmdLiveOpenPlatformAuthData) Success() bool {
+	return arp.Code == 0
+}
