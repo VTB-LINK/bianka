@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"vlink.dev/vtb-live/bianka/live"
 	"vlink.dev/vtb-live/bianka/proto"
@@ -26,7 +27,23 @@ func main() {
 		panic(err)
 	}
 
-	defer liveClient.AppEnd(startResp.GameInfo.GameID)
+	tk := time.NewTicker(time.Second * 20)
+	go func() {
+		for {
+			select {
+			case <-tk.C:
+				// 心跳
+				if err := liveClient.AppHeartbeat(startResp.GameInfo.GameID); err != nil {
+					log.Println("Heartbeat fail", err)
+				}
+			}
+		}
+	}()
+
+	defer func() {
+		tk.Stop()
+		liveClient.AppEnd(startResp.GameInfo.GameID)
+	}()
 
 	wcs, err := liveClient.StartWebsocket(startResp, map[uint32]live.DispatcherHandle{
 		proto.OperationMessage: messageHandle,

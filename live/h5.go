@@ -14,13 +14,16 @@ const (
 )
 
 type H5SignatureParams struct {
-	Timestamp string
-	Code      string
-	Mid       string
-	Caller    string
-	CodeSign  string
+	Timestamp string // 时间戳
+	Code      string // 身份码
+	Mid       string // 用户id
+	Caller    string // 调用方
+	CodeSign  string // 签名
 
-	RoomID  string
+	RoomID string // 直播间ID 调用页会携带
+	// 场景参数 调用页会携带
+	// plug_env=1显示设置项区域的场景，如插件详情页、直播姬内插件配置弹窗;plug_env=0插件实际使用的场景，如插件详情页复制链接、直播姬内使用载入的链接。
+	// see https://open-live.bilibili.com/document/ad4901b8-c13e-7a20-e07e-410ad182564a
 	PlugEnv string
 }
 

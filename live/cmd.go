@@ -170,6 +170,7 @@ type CmdLiveOpenPlatformLikeData struct {
 	RoomID                 int    `json:"room_id"`
 }
 
+// CmdLiveOpenPlatformAuthData 鉴权数据
 type CmdLiveOpenPlatformAuthData struct {
 	Code int64 `json:"code,omitempty"`
 }

@@ -217,5 +217,10 @@ func (c *Client) DoRequest(reqJson, reqPath, nonce string) (*BaseResp, error) {
 func (c *Client) VerifyH5RequestSignature(req *http.Request) bool {
 	h5sp := ParseH5SignatureParamsWithRequest(req)
 
+	return c.VerifyH5RequestSignatureWithParams(h5sp)
+}
+
+// VerifyH5RequestSignatureWithParams 验证h5请求签名
+func (c *Client) VerifyH5RequestSignatureWithParams(h5sp *H5SignatureParams) bool {
 	return h5sp.ValidateSignature(c.rCfg.AccessKeySecret)
 }
