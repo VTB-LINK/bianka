@@ -37,7 +37,7 @@
 
 ## 快速开始
 
-具体使用方法可以参考 example 目录下的例子
+具体使用方法可以参考[`example`](https://github.com/VTB-LINK/bianka/tree/main/example)目录下的例子
 
 ### 直播间长连接
 ```go
