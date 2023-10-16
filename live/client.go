@@ -31,8 +31,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
-	"github.com/vtb-link/bianka/proto"
 	"golang.org/x/exp/slog"
+
+	"github.com/vtb-link/bianka/proto"
 )
 
 // DefaultLoggerGenerator 默认日志生成器

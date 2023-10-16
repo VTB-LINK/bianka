@@ -34,13 +34,13 @@ import (
 )
 
 const (
-	HostProdLiveOpen = "https://live-open.biliapi.com" //开放平台 (线上环境)
+	HostProdLiveOpen = "https://live-open.biliapi.com" // 开放平台 (线上环境)
 )
 
 type Config struct {
-	AccessKey            string //access_key
-	AccessKeySecret      string //access_key_secret
-	OpenPlatformHttpHost string //开放平台 (线上环境)
+	AccessKey            string // access_key
+	AccessKeySecret      string // access_key_secret
+	OpenPlatformHttpHost string // 开放平台 (线上环境)
 	AppID                int64  // 应用id
 }
 
@@ -185,7 +185,7 @@ func (c *Client) DoRequest(reqJson, reqPath, nonce string) (*BaseResp, error) {
 		Timestamp:         strconv.FormatInt(time.Now().Unix(), 10),
 		SignatureMethod:   HmacSha256,
 		SignatureVersion:  BiliVersion,
-		Nonce:             nonce, //用于幂等
+		Nonce:             nonce, // 用于幂等
 		AccessKeyID:       c.rCfg.AccessKey,
 		ContentMD5:        Md5(reqJson),
 	}
