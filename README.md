@@ -171,43 +171,43 @@ func main() {
 package main
 
 import (
-	"log"
-	"net/http"
+    "log"
+    "net/http"
 
-	"github.com/vtb-link/bianka/live"
+    "github.com/vtb-link/bianka/live"
 )
 
 const (
-	mockSecret = "NPRZADNURSKNGYDFMDKJOOTLQMGDHL"
-	mockURL    = "https://play-live.bilibili.com/plugins-full/1234567?Timestamp=1650012983&Code=460803&Mid=110000345&Caller=bilibili&CodeSign=8c1fa83955d83960680277122bd31fd6f209a82787d57912c1d3817487bfc2ef"
+    mockSecret = "NPRZADNURSKNGYDFMDKJOOTLQMGDHL"
+    mockURL    = "https://play-live.bilibili.com/plugins-full/1234567?Timestamp=1650012983&Code=460803&Mid=110000345&Caller=bilibili&CodeSign=8c1fa83955d83960680277122bd31fd6f209a82787d57912c1d3817487bfc2ef"
 )
 
 var mockRequest, _ = http.NewRequest(http.MethodGet, mockURL, nil)
 
 func main() {
-	appID := 1234567 // 申请的appID
-	sdkConfig := live.NewConfig("申请的key", mockSecret, int64(appID))
+    appID := 1234567 // 申请的appID
+    sdkConfig := live.NewConfig("申请的key", mockSecret, int64(appID))
 
-	// 创建sdk实例
-	sdk := live.NewClient(sdkConfig)
+    // 创建sdk实例
+    sdk := live.NewClient(sdkConfig)
 
-	// 如果只是验证请求签名
-	ok := sdk.VerifyH5RequestSignature(mockRequest)
-	if !ok {
-		log.Println("VerifyH5RequestSignature fail")
-		return
-	}
+    // 如果只是验证请求签名
+    ok := sdk.VerifyH5RequestSignature(mockRequest)
+    if !ok {
+        log.Println("VerifyH5RequestSignature fail")
+        return
+    }
 
-	// 推荐先解析然后再验证
-	h5sp := live.ParseH5SignatureParamsWithRequest(mockRequest)
-	
-	// 验证请求签名
-	ok = sdk.VerifyH5RequestSignatureWithParams(h5sp)
-	// 或者
-	ok = h5sp.ValidateSignature(mockSecret)
-	
-	// 这样的好处是，可以在验证签名后，直接使用h5sp中的参数
-	log.Println(h5sp)
+    // 推荐先解析然后再验证
+    h5sp := live.ParseH5SignatureParamsWithRequest(mockRequest)
+
+    // 验证请求签名
+    ok = sdk.VerifyH5RequestSignatureWithParams(h5sp)
+    // 或者
+    ok = h5sp.ValidateSignature(mockSecret)
+
+    // 这样的好处是，可以在验证签名后，直接使用h5sp中的参数
+    log.Println(h5sp)
 }
 ```
 
@@ -232,19 +232,19 @@ import (
 )
 
 func main() {
-	// 读取到的长连数据
-	raw := []byte("xxxxxx")
-	// 解析数据
-	msgList, err := proto.UnpackMessage(raw)
-	
-	sendRaw := []byte("xxxxxx")
-	// pack msg
-	msg := proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationMessage, sendRaw)
-	
-	// 如果仅仅需要pack header
-	header := proto.PackHeader(proto.HeaderDefaultSequence, proto.OperationMessage)
-	
-	// 如果只需要unpack header
-	header, err := proto.UnpackHeader(raw[:proto.PackageHeaderTotalLength])
+    // 读取到的长连数据
+    raw := []byte("xxxxxx")
+    // 解析数据
+    msgList, err := proto.UnpackMessage(raw)
+
+    sendRaw := []byte("xxxxxx")
+    // pack msg
+    msg := proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationMessage, sendRaw)
+
+    // 如果仅仅需要pack header
+    header := proto.PackHeader(proto.HeaderDefaultSequence, proto.OperationMessage)
+
+    // 如果只需要unpack header
+    header, err := proto.UnpackHeader(raw[:proto.PackageHeaderTotalLength])
 }
 ```
