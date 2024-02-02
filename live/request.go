@@ -153,23 +153,23 @@ func (c *Client) AppBatchHeartbeat(gameIDs []string) (*AppBatchHeartbeatResponse
 
 // StartWebsocket 启动websocket
 // 此方法会一键完成鉴权，心跳，消息分发
-func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, onCloseFunc func(startResp *AppStartResponse)) (*WsClient, error) {
-	wc := NewWsClient(
+func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, onCloseFunc WsClientCloseCallback) (*WsClient, error) {
+	wsClient := NewWsClient(
 		startResp,
 		dispatcherHandleMap,
 		nil).
 		WithOnClose(onCloseFunc)
 
-	if err := wc.Dial(startResp.WebsocketInfo.WssLink); err != nil {
+	if err := wsClient.Dial(startResp.WebsocketInfo.WssLink); err != nil {
 		return nil, err
 	}
 
-	if err := wc.SendAuth(); err != nil {
+	if err := wsClient.SendAuth(); err != nil {
 		return nil, err
 	}
 
-	wc.Run()
-	return wc, nil
+	wsClient.Run()
+	return wsClient, nil
 }
 
 func (c *Client) doRequest(reqJson, reqPath string) (*BaseResp, error) {

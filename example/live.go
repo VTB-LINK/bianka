@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -20,6 +21,9 @@ var rCfg = live.NewConfig(
 var code = "主播的code" // 身份码 也叫 idCode
 
 func main() {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
 	liveClient := live.NewClient(rCfg)
 
 	startResp, err := liveClient.AppStart(code)
@@ -31,6 +35,8 @@ func main() {
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-tk.C:
 				// 心跳
 				if err := liveClient.AppHeartbeat(startResp.GameInfo.GameID); err != nil {
@@ -47,9 +53,23 @@ func main() {
 
 	wcs, err := liveClient.StartWebsocket(startResp, map[uint32]live.DispatcherHandle{
 		proto.OperationMessage: messageHandle,
-	}, func(startResp *live.AppStartResponse) {
+	}, func(wcs *live.WsClient, startResp *live.AppStartResponse, closeType int) {
 		// 注册关闭回调
 		log.Println("WebsocketClient onClose", startResp)
+
+		// 注意检查关闭类型, 避免无限重连
+		if closeType == live.CloseActively || closeType == live.CloseReceivedShutdownMessage || closeType == live.CloseAuthFailed {
+			log.Println("WebsocketClient exit")
+			return
+		}
+
+		// 对于可能的情况下重新连接
+		// 注意: 在某些场景下 startResp 会变化, 需要重新获取
+		// 此外, 一但 AppHeartbeat 失败, 会导致 startResp.GameInfo.GameID 变化, 需要重新获取
+		err := wcs.Reconnection(startResp)
+		if err != nil {
+			log.Println("Reconnection fail", err)
+		}
 	})
 
 	if err != nil {
