@@ -133,13 +133,30 @@ func main() {
     // 关闭回调事件
     // 此事件会在websocket连接关闭后触发
     // 时序如下：
+    // 0. send close message // 主动发送关闭消息
     // 1. close eventLoop // 不再处理任何消息
     // 2. close websocket // 关闭websocket连接
     // 3. onCloseCallback // 触发关闭回调事件
-    onCloseCallback := func(startResp *live.AppStartResponse) {
+    // 增加了closeType 参数, 用于区分关闭类型
+    onCloseCallback := func(wcs *live.WsClient, startResp *live.AppStartResponse, closeType int) {
+        // 注册关闭回调
         log.Println("WebsocketClient onClose", startResp)
-    }
+        
+        // 注意检查关闭类型, 避免无限重连
+        if closeType == live.CloseActively || closeType == live.CloseReceivedShutdownMessage || closeType == live.CloseAuthFailed {
+            log.Println("WebsocketClient exit")
+            return
+        }
 
+        // 对于可能的情况下重新连接
+        // 注意: 在某些场景下 startResp 会变化, 需要重新获取
+        // 此外, 一但 AppHeartbeat 失败, 会导致 startResp.GameInfo.GameID 变化, 需要重新获取
+        err := wcs.Reconnection(startResp)
+        if err != nil {
+            log.Println("Reconnection fail", err)
+        }
+    }
+    
     // 一键开启websocket
     wsClient, err := sdk.StartWebsocket(startResp, dispatcherHandle, onCloseCallback)
     if err != nil {
