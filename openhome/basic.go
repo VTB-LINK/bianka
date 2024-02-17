@@ -30,6 +30,12 @@ import (
 
 var _random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
+type PageResp struct {
+	PageNumber int `json:"pn"`
+	PageSize   int `json:"ps"`
+	Total      int `json:"total"`
+}
+
 type BaseResp struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -59,9 +65,10 @@ type AppConfig struct {
 type AppClient struct {
 	appCfg *AppConfig
 
-	OAuth *OAuth
-	User  *User
-	Live  *Live
+	OAuth   *OAuth
+	User    *User
+	Live    *Live
+	Archive *Archive
 }
 
 func NewAppClient(cfg *AppConfig) *AppClient {
@@ -76,6 +83,7 @@ func NewAppClient(cfg *AppConfig) *AppClient {
 	app.OAuth = (*OAuth)(bs)
 	app.User = (*User)(bs)
 	app.Live = (*Live)(bs)
+	app.Archive = (*Archive)(bs)
 
 	return app
 }
