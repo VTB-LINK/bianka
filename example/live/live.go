@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2023 VTB-LINK and runstp.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+ * FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+ * OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF,
+ * OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 package main
 
 import (
@@ -8,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vtb-link/bianka/basic"
 	"github.com/vtb-link/bianka/live"
 	"github.com/vtb-link/bianka/proto"
 )
@@ -51,14 +75,13 @@ func main() {
 		liveClient.AppEnd(startResp.GameInfo.GameID)
 	}()
 
-	wcs, err := liveClient.StartWebsocket(startResp, map[uint32]live.DispatcherHandle{
-		proto.OperationMessage: messageHandle,
-	}, func(wcs *live.WsClient, startResp *live.AppStartResponse, closeType int) {
+	// close 事件处理
+	onCloseHandle := func(wcs *basic.WsClient, startResp basic.StartResp, closeType int) {
 		// 注册关闭回调
 		log.Println("WebsocketClient onClose", startResp)
 
 		// 注意检查关闭类型, 避免无限重连
-		if closeType == live.CloseActively || closeType == live.CloseReceivedShutdownMessage || closeType == live.CloseAuthFailed {
+		if closeType == basic.CloseActively || closeType == basic.CloseReceivedShutdownMessage || closeType == basic.CloseAuthFailed {
 			log.Println("WebsocketClient exit")
 			return
 		}
@@ -70,7 +93,14 @@ func main() {
 		if err != nil {
 			log.Println("Reconnection fail", err)
 		}
-	})
+	}
+
+	// 消息处理 Handle
+	dispatcherHandleMap := basic.DispatcherHandleMap{
+		proto.OperationMessage: messageHandle,
+	}
+
+	wcs, err := basic.StartWebsocket(startResp, dispatcherHandleMap, onCloseHandle, basic.DefaultLoggerGenerator())
 
 	if err != nil {
 		panic(err)
@@ -94,7 +124,7 @@ func main() {
 	}
 }
 
-func messageHandle(msg *proto.Message) error {
+func messageHandle(wcs *basic.WsClient, msg *proto.Message) error {
 	// 单条消息raw
 	log.Println(string(msg.Payload()))
 

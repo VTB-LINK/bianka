@@ -152,7 +152,10 @@ func (c *Client) AppBatchHeartbeat(gameIDs []string) (*AppBatchHeartbeatResponse
 }
 
 // StartWebsocket 启动websocket
+// Deprecated: use basic.StartWebsocket instead
 // 此方法会一键完成鉴权，心跳，消息分发
+// 由于2024年B站决定在开发者平台启用直播间长链功能,所以重新设计了WsClient,并且将其移动到basic包中
+// 这里仅作为兼容性处理，后续版本会废弃
 func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, onCloseFunc WsClientCloseCallback) (*WsClient, error) {
 	wsClient := NewWsClient(
 		startResp,
@@ -160,7 +163,7 @@ func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap
 		nil).
 		WithOnClose(onCloseFunc)
 
-	if err := wsClient.Dial(startResp.WebsocketInfo.WssLink); err != nil {
+	if err := wsClient.Dial(startResp.GetLinks()...); err != nil {
 		return nil, err
 	}
 

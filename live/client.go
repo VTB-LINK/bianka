@@ -24,9 +24,6 @@
 package live
 
 import (
-	"encoding/json"
-
-	"github.com/pkg/errors"
 	"github.com/vtb-link/bianka/basic"
 	"github.com/vtb-link/bianka/proto"
 	"golang.org/x/exp/slog"
@@ -47,21 +44,17 @@ const (
 
 type WsClientCloseCallback func(wsClient *WsClient, startResp *AppStartResponse, closeType int)
 
-type DispatcherHandle basic.DispatcherHandle
+type DispatcherHandle func(msg *proto.Message) error
 
 type WsClient struct {
-	logger      *slog.Logger
-	basicClient *basic.WsClient
-	startResp   *AppStartResponse // 启动app的返回信息
+	basic.WsClient
 }
 
-func (wsClient *WsClient) WithOnClose(onClose WsClientCloseCallback) *WsClient {
-	wsClient.basicClient.WithOnClose(func(basicWs *basic.WsClient, closeType int) {
-		onClose(wsClient, wsClient.startResp, closeType)
-	})
-	return wsClient
-}
-
+// NewWsClient 创建一个新的WsClient
+// Deprecated: use basic.NewWsClient instead
+// 由于2024年B站决定在开发者平台启用直播间长链功能,所以重新设计了WsClient,并且将其移动到basic包中
+// 请使用 basic.NewWsClient 替代
+// 这里仅作为兼容性处理，后续版本会废弃
 func NewWsClient(startResp *AppStartResponse, dispatcherHandleMap map[uint32]DispatcherHandle, logger *slog.Logger) *WsClient {
 	if logger == nil {
 		logger = basic.DefaultLoggerGenerator()
@@ -72,96 +65,25 @@ func NewWsClient(startResp *AppStartResponse, dispatcherHandleMap map[uint32]Dis
 		slog.Int("room_id", startResp.AnchorInfo.RoomID),
 	)
 
-	ws := &WsClient{
-		logger:    logger,
-		startResp: startResp,
-	}
-
 	// 注册分发处理函数
-	_dispatcherHandleMap := map[uint32]basic.DispatcherHandle{
-		proto.OperationUserAuthenticationReply: ws.authResp,
-		proto.OperationHeartbeatReply:          ws.heartBeatResp,
-	}
+	_dispatcherHandleMap := basic.DispatcherHandleMap{}
 
 	if dispatcherHandleMap != nil {
 		for op, handle := range dispatcherHandleMap {
-			_dispatcherHandleMap[op] = basic.DispatcherHandle(handle)
+			_dispatcherHandleMap[op] = func(wsClient *basic.WsClient, msg *proto.Message) error {
+				return handle(msg)
+			}
 		}
 	}
 
-	ws.basicClient = basic.NewWsClient(_dispatcherHandleMap, logger)
-	return ws
-}
-
-func (wsClient *WsClient) Close() error {
-	return wsClient.basicClient.Close(basic.CloseActively)
-}
-
-func (wsClient *WsClient) Reconnection(startResp *AppStartResponse) error {
-	wsClient.startResp = startResp
-	wsClient.basicClient.Reset()
-
-	if err := wsClient.Dial(startResp.WebsocketInfo.WssLink); err != nil {
-		return err
+	return &WsClient{
+		WsClient: *basic.NewWsClient(startResp, _dispatcherHandleMap, logger),
 	}
-
-	if err := wsClient.SendAuth(); err != nil {
-		return err
-	}
-
-	wsClient.Run()
-	return nil
 }
 
-// Dial 链接
-func (wsClient *WsClient) Dial(links []string) error {
-	return wsClient.basicClient.Dial(links...)
-}
-
-func (wsClient *WsClient) Run() {
-	wsClient.basicClient.Run()
-}
-
-// SendAuth 发送鉴权信息
-func (wsClient *WsClient) SendAuth() error {
-	return wsClient.SendMessage(proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationUserAuthentication, []byte(wsClient.startResp.WebsocketInfo.AuthBody)))
-}
-
-// SendMessage 发送消息
-func (wsClient *WsClient) SendMessage(msg proto.Message) error {
-	return wsClient.basicClient.SendMessage(msg)
-}
-
-// SendHeartbeat 发送心跳
-func (wsClient *WsClient) SendHeartbeat() error {
-	return wsClient.SendMessage(proto.PackMessage(proto.HeaderDefaultSequence, proto.OperationHeartbeat, nil))
-}
-
-// authResp  认证结果
-func (wsClient *WsClient) authResp(msg *proto.Message) error {
-	defer func() {
-		// 鉴权失败，关闭链接
-		if !wsClient.basicClient.IsAuthed() {
-			go wsClient.basicClient.Close(CloseAuthFailed)
-		}
-	}()
-
-	resp := &CmdLiveOpenPlatformAuthData{}
-	if err := json.Unmarshal(msg.Payload(), resp); err != nil {
-		return errors.Wrapf(err, "json unmarshal fail. payload:%s", msg.Payload())
-	}
-
-	if !resp.Success() {
-		return errors.Wrapf(BilibiliWebsocketAuthFailed, "auth fail. code:%d", resp.Code)
-	}
-
-	wsClient.logger.Info("auth success")
-	wsClient.basicClient.AuthSuccess()
-	return nil
-}
-
-// heartBeatResp  心跳结果
-func (wsClient *WsClient) heartBeatResp(msg *proto.Message) (err error) {
-	wsClient.logger.Debug("heartbeat success")
-	return
+func (wsClient *WsClient) WithOnClose(onClose WsClientCloseCallback) *WsClient {
+	wsClient.WsClient.WithOnClose(func(_ *basic.WsClient, startResp basic.StartResp, closeType int) {
+		onClose(wsClient, startResp.(*AppStartResponse), closeType)
+	})
+	return wsClient
 }

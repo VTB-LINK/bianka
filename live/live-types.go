@@ -109,6 +109,14 @@ type AppStartResponse struct {
 	WebsocketInfo WebSocketInfo `json:"websocket_info"`
 }
 
+func (as *AppStartResponse) GetAuthBody() []byte {
+	return []byte(as.WebsocketInfo.AuthBody)
+}
+
+func (as *AppStartResponse) GetLinks() []string {
+	return as.WebsocketInfo.WssLink
+}
+
 type AppEndRequest struct {
 	// 场次id
 	GameID string `json:"game_id"`
