@@ -37,7 +37,12 @@ const (
 	CmdLiveOpenPlatformGuard        = "LIVE_OPEN_PLATFORM_GUARD"          // 付费大航海
 	CmdLiveOpenPlatformLike         = "LIVE_OPEN_PLATFORM_LIKE"           // 点赞
 
-	CmdLiveRoomDanmu = "OPEN_LIVEROOM_DM" // 弹幕
+	CmdLiveRoomDanmu        = "OPEN_LIVEROOM_DM"             // 弹幕
+	CmdLiveRoomSendGift     = "OPEN_LIVEROOM_SEND_GIFT"      // 礼物
+	CmdLiveRoomSuperChat    = "OPEN_LIVEROOM_SUPER_CHAT"     // SC
+	CmdLiveRoomSuperChatDel = "OPEN_LIVEROOM_SUPER_CHAT_DEL" // SC删除
+	CmdLiveRoomSuperGuard   = "OPEN_LIVEROOM_GUARD"          // 付费大航海
+	CmdLiveRoomLike         = "OPEN_LIVEROOM_LIKE"           // 点赞
 )
 
 // AutomaticParsingMessageCommand 自动解析消息命令
@@ -57,15 +62,15 @@ func AutomaticParsingMessageCommand(payload []byte) (string, interface{}, error)
 	switch _cmd.Cmd {
 	case CmdLiveOpenPlatformDanmu, CmdLiveRoomDanmu:
 		data = &CmdDanmuData{}
-	case CmdLiveOpenPlatformSendGift:
+	case CmdLiveOpenPlatformSendGift, CmdLiveRoomSendGift:
 		data = &CmdSendGiftData{}
-	case CmdLiveOpenPlatformSuperChat:
+	case CmdLiveOpenPlatformSuperChat, CmdLiveRoomSuperChat:
 		data = &CmdSuperChatData{}
-	case CmdLiveOpenPlatformSuperChatDel:
+	case CmdLiveOpenPlatformSuperChatDel, CmdLiveRoomSuperChatDel:
 		data = &CmdSuperChatDelData{}
-	case CmdLiveOpenPlatformGuard:
+	case CmdLiveOpenPlatformGuard, CmdLiveRoomSuperGuard:
 		data = &CmdGuardData{}
-	case CmdLiveOpenPlatformLike:
+	case CmdLiveOpenPlatformLike, CmdLiveRoomLike:
 		data = &CmdLikeData{}
 	default:
 		data = map[string]interface{}{}
@@ -120,9 +125,10 @@ type CmdSendGiftData struct {
 	Timestamp              int    `json:"timestamp"`
 	MsgID                  string `json:"msg_id"`
 	AnchorInfo             struct {
-		Uid   int    `json:"uid"`
-		Uname string `json:"uname"`
-		Uface string `json:"uface"`
+		OpenID string `json:"open_id"`
+		Uid    int    `json:"uid"`
+		Uname  string `json:"uname"`
+		Uface  string `json:"uface"`
 	} `json:"anchor_info"`
 	GiftIcon  string `json:"gift_icon"`
 	ComboGift bool   `json:"combo_gift"`
