@@ -6,29 +6,53 @@
 
 **Bianka** 是一个基于go语言的bilibili开放平台sdk，目前支持以下功能：
 
-- live（直播）
+- [live（互动开放平台）](https://open-live.bilibili.com/)
     - [x] 项目开启
     - [x] 项目关闭
     - [x] 项目心跳
     - [x] 项目批量心跳
-    - 直播间长连接
-        - [x] websocket 连接
-        - [x] 心跳
-        - [x] 鉴权
-        - [x] 弹幕
-        - [x] 礼物
-        - [x] super chat（上下线）
-        - [x] 上舰（开通大航海）
-        - [x] 点赞
+    - [x] 直播间长连接(全事件支持)
     - H5-API
         - [x] 请求签名解析
         - [x] 请求签名验证
+- [openhome(开放平台)](https://openhome.bilibili.com/)
+  - 直播能力
+    - [x] 获取直播间基础信息
+    - [x] 直播间长连接及心跳ID
+    - [x] 直播间心跳
+    - [x] 直播间批量心跳
+    - [x] 直播间长连接(全事件支持)
+  - 账号管理
+    - [x] 账号授权
+    - [x] 令牌刷新
+  - 用户管理
+    - [x] 查询用户已授权权限列表
+    - [x] 获取用户公开信息
+  - 视频稿件管理
+    - [x] 视频稿件投递
+    - [x] 视频稿件查询
+    - [x] 视频稿件编辑
+    - [x] 视频稿件删除
+  - 专栏稿件管理
+    - [ ] 文章管理
+    - [ ] 文集管理
+    - [ ] 图片上传
+  - 数据开放服务
+    - [x] 用户数据
+    - [x] 视频数据
+    - [x] 专栏数据 
+  - [ ] 活动接入
+  - [ ] 服务市场
+  - [ ] 数据资源接入
+  - [ ] WebHook
 
 ## 先决条件
 
 - go 1.20+
-- bilibili开放平台账号
+- bilibili 互动开放平台
     - 申请方式：[成为开发者并获取开发密钥](https://open-live.bilibili.com/document/849b924b-b421-8586-3e5e-765a72ec3840)
+- bilibili 开放平台
+  - 申请方式：[成为开发者并获取开发密钥](https://openhome.bilibili.com/company/add)
 
 ## 安装
 
@@ -52,30 +76,32 @@ import (
     "syscall"
     "time"
 
+    "github.com/vtb-link/bianka/basic"
     "github.com/vtb-link/bianka/live"
+    "github.com/vtb-link/bianka/openhome"
     "github.com/vtb-link/bianka/proto"
 )
 
-func messageHandle(msg *proto.Message) error {
+func messageHandle(wsClient *basic.WsClient, msg *proto.Message) error {
     // 单条消息raw 如果需要自己解析可以使用
     log.Println(string(msg.Payload()))
 
     // sdk提供了自动解析消息的方法，可以快速解析为对应的cmd和data
-    // 具体的cmd 可以参考 live/cmd.go
-    cmd, data, err := live.AutomaticParsingMessageCommand(msg.Payload())
+    // 具体的cmd 可以参考 proto/cmd.go
+    cmd, data, err := proto.AutomaticParsingMessageCommand(msg.Payload())
     if err != nil {
         return err
     }
 
     // 你可以使用cmd进行switch
     switch cmd {
-    case live.CmdLiveOpenPlatformDanmu:
-        log.Println(cmd, data.(*live.CmdLiveOpenPlatformDanmuData))
+    case proto.CmdLiveOpenPlatformDanmu:
+        log.Println(cmd, data.(*proto.CmdDanmuData))
     }
 
     // 也可以使用data进行switch
     switch v := data.(type) {
-    case *live.CmdLiveOpenPlatformGuardData:
+    case *proto.CmdGuardData:
         log.Println(cmd, v)
     }
 
@@ -121,12 +147,42 @@ func main() {
         tk.Stop()
         sdk.AppEnd(startResp.GameInfo.GameID)
     }()
+    
+    //{
+    //    // 如果想使用openhome开放平台
+    //    appClient := openhome.NewAppClient(&openhome.AppConfig{
+    //        ClientID:     "申请的clientID",
+    //        ClientSecret: "申请的clientSecret",
+    //    })
+    //
+    //    startResp, err := appClient.Live.WsStart("用户accessToken")
+    //    if err != nil {
+    //        panic(err)
+    //    }
+    //
+    //    // 注意开放平台必须保持心跳
+    //    tk := time.NewTicker(time.Second * 20)
+    //    go func() {
+    //        for {
+    //            select {
+    //            case <-ctx.Done():
+    //                return
+    //            case <-tk.C:
+    //                // 心跳
+    //                log.Println("WsHeartbeat")
+    //                if err := appClient.Live.WsHeartbeat(accessToken.AccessToken, startResp.ConnID); err != nil {
+    //                    log.Println("Heartbeat fail", err)
+    //                }
+    //            }
+    //        }
+    //    }()
+    //}
 
     // 注册事件处理器
     // 如果需要注册其他事件，可以参考 proto/op.go
     // SDK 已经默认处理了心跳和鉴权事件，所以目前为止只需要注册 proto.OperationMessage
     // 注意：注册的事件处理器内不要做耗时操作，如果需要做耗时操作，请创建新的goroutine
-    dispatcherHandle := map[uint32]live.DispatcherHandle{
+    dispatcherHandleMap := basic.DispatcherHandleMap{
         proto.OperationMessage: messageHandle,
     }
 
@@ -138,10 +194,10 @@ func main() {
     // 2. close websocket // 关闭websocket连接
     // 3. onCloseCallback // 触发关闭回调事件
     // 增加了closeType 参数, 用于区分关闭类型
-    onCloseCallback := func(wcs *live.WsClient, startResp *live.AppStartResponse, closeType int) {
+    onCloseCallback := func(wcs *basic.WsClient, startResp basic.StartResp, closeType int) {
         // 注册关闭回调
         log.Println("WebsocketClient onClose", startResp)
-        
+
         // 注意检查关闭类型, 避免无限重连
         if closeType == live.CloseActively || closeType == live.CloseReceivedShutdownMessage || closeType == live.CloseAuthFailed {
             log.Println("WebsocketClient exit")
@@ -156,9 +212,9 @@ func main() {
             log.Println("Reconnection fail", err)
         }
     }
-    
+
     // 一键开启websocket
-    wsClient, err := sdk.StartWebsocket(startResp, dispatcherHandle, onCloseCallback)
+    wsClient, err := basic.StartWebsocket(startResp, dispatcherHandleMap, onCloseCallback, basic.DefaultLoggerGenerator())
     if err != nil {
         panic(err)
     }
