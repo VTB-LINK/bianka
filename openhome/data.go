@@ -24,7 +24,6 @@
 package openhome
 
 import (
-	"net/http"
 	"strings"
 
 	"github.com/go-resty/resty/v2"
@@ -54,12 +53,8 @@ func (d *Data) UserStat(accessToken string) (*UserStatResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*UserStatResp), nil
@@ -91,12 +86,8 @@ func (d *Data) ArcStat(accessToken, resourceID string) (*ArcStatResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArcStatResp), nil
@@ -128,12 +119,8 @@ func (d *Data) ArcIncStats(accessToken string) (*ArcIncStatsResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArcIncStatsResp), nil
@@ -199,12 +186,8 @@ func (d *Data) ArtStat(accessToken string, ids []string) (*ArtStatResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArtStatResp), nil
@@ -235,12 +218,8 @@ func (d *Data) ArtIncStats(accessToken string) (*ArtIncStatsResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArtIncStatsResp), nil

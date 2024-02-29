@@ -25,7 +25,12 @@ package openhome
 
 import (
 	"math/rand"
+	"net/http"
 	"time"
+
+	"github.com/go-resty/resty/v2"
+	"github.com/pkg/errors"
+	errors2 "github.com/vtb-link/bianka/errors"
 )
 
 var _random = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -86,4 +91,16 @@ func NewAppClient(cfg *AppConfig) *AppClient {
 	app.Archive = (*Archive)(bs)
 
 	return app
+}
+
+func checkResp(resp *resty.Response, result *BaseResp) error {
+	if resp.StatusCode() != http.StatusOK {
+		return errors.Wrapf(errors2.BilibiliRequestFailed, "do request fail, resp: %v", resp)
+	}
+
+	if !result.IsSuccess() {
+		return errors.Wrapf(errors2.BilibiliResponseNotSuccess, "request fail: %d %s", result.Code, result.Message)
+	}
+
+	return nil
 }

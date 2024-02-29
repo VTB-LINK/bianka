@@ -24,7 +24,6 @@
 package openhome
 
 import (
-	"net/http"
 	"net/url"
 	"strconv"
 	"time"
@@ -133,12 +132,8 @@ func (o *OAuth) Code2AccessToken(code string) (*Code2AccessTokenResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("Code2AccessToken fail, resp: %v", result)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*Code2AccessTokenResp), nil
@@ -166,12 +161,8 @@ func (o *OAuth) RefreshToken(refreshToken string) (*RefreshTokenResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("RefreshToken fail, resp: %v", result)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*RefreshTokenResp), nil

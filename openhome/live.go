@@ -24,8 +24,6 @@
 package openhome
 
 import (
-	"net/http"
-
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
 )
@@ -59,12 +57,8 @@ func (l *Live) GetRoomInfo(accessToken string) (*RoomInfoResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*RoomInfoResp), nil
@@ -101,12 +95,8 @@ func (l *Live) WsStart(accessToken string) (*WsStartResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*WsStartResp), nil
@@ -131,12 +121,8 @@ func (l *Live) WsHeartbeat(accessToken, connID string) error {
 		return errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return err
 	}
 
 	return nil
@@ -165,12 +151,8 @@ func (l *Live) WsBatchHeartbeat(accessToken string, connIDs ...string) (*WsBatch
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*WsBatchHeartbeatResp), nil

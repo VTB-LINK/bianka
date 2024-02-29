@@ -31,6 +31,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
+	"github.com/vtb-link/bianka/basic"
 )
 
 const (
@@ -70,12 +71,12 @@ func (c *Client) AppStart(code string) (*AppStartResponse, error) {
 		AppID: c.rCfg.AppID,
 	}
 
-	reqJson, err := json.Marshal(startAppReq)
+	reqJSON, err := json.Marshal(startAppReq)
 	if err != nil {
-		err = errors.Wrap(err, "json marshal fail")
+		return nil, errors.Wrap(err, "json marshal fail")
 	}
 
-	resp, err := c.doRequest(string(reqJson), "/v2/app/start")
+	resp, err := c.doRequest(string(reqJSON), "/v2/app/start")
 	if err != nil {
 		return nil, errors.WithMessage(err, "start app fail")
 	}
@@ -95,12 +96,12 @@ func (c *Client) AppEnd(gameID string) error {
 		AppID:  c.rCfg.AppID,
 	}
 
-	reqJson, err := json.Marshal(endAppReq)
+	reqJSON, err := json.Marshal(endAppReq)
 	if err != nil {
-		err = errors.Wrap(err, "json marshal fail")
+		return errors.Wrap(err, "json marshal fail")
 	}
 
-	_, err = c.doRequest(string(reqJson), "/v2/app/end")
+	_, err = c.doRequest(string(reqJSON), "/v2/app/end")
 	if err != nil {
 		return errors.WithMessage(err, "end app fail")
 	}
@@ -114,12 +115,12 @@ func (c *Client) AppHeartbeat(gameID string) error {
 		GameID: gameID,
 	}
 
-	reqJson, err := json.Marshal(heartbeatReq)
+	reqJSON, err := json.Marshal(heartbeatReq)
 	if err != nil {
-		err = errors.Wrap(err, "json marshal fail")
+		return errors.Wrap(err, "json marshal fail")
 	}
 
-	_, err = c.doRequest(string(reqJson), "/v2/app/heartbeat")
+	_, err = c.doRequest(string(reqJSON), "/v2/app/heartbeat")
 	if err != nil {
 		return errors.WithMessage(err, "heartbeat fail")
 	}
@@ -133,12 +134,12 @@ func (c *Client) AppBatchHeartbeat(gameIDs []string) (*AppBatchHeartbeatResponse
 		GameIDs: gameIDs,
 	}
 
-	reqJson, err := json.Marshal(heartbeatReq)
+	reqJSON, err := json.Marshal(heartbeatReq)
 	if err != nil {
-		err = errors.Wrap(err, "json marshal fail")
+		return nil, errors.Wrap(err, "json marshal fail")
 	}
 
-	resp, err := c.doRequest(string(reqJson), "/v2/app/batchHeartbeat")
+	resp, err := c.doRequest(string(reqJSON), "/v2/app/batchHeartbeat")
 	if err != nil {
 		return nil, errors.WithMessage(err, "heartbeat fail")
 	}
@@ -175,13 +176,13 @@ func (c *Client) StartWebsocket(startResp *AppStartResponse, dispatcherHandleMap
 	return wsClient, nil
 }
 
-func (c *Client) doRequest(reqJson, reqPath string) (*BaseResp, error) {
-	return c.DoRequest(reqJson, reqPath, strconv.FormatInt(time.Now().UnixNano(), 10))
+func (c *Client) doRequest(reqJSON, reqPath string) (*BaseResp, error) {
+	return c.DoRequest(reqJSON, reqPath, basic.RandStringBytes(32))
 }
 
 // DoRequest 发起请求
 // 用于用户自定义请求
-func (c *Client) DoRequest(reqJson, reqPath, nonce string) (*BaseResp, error) {
+func (c *Client) DoRequest(reqJSON, reqPath, nonce string) (*BaseResp, error) {
 	header := &CommonHeader{
 		ContentType:       JsonType,
 		ContentAcceptType: JsonType,
@@ -190,27 +191,27 @@ func (c *Client) DoRequest(reqJson, reqPath, nonce string) (*BaseResp, error) {
 		SignatureVersion:  BiliVersion,
 		Nonce:             nonce, // 用于幂等
 		AccessKeyID:       c.rCfg.AccessKey,
-		ContentMD5:        Md5(reqJson),
+		ContentMD5:        Md5(reqJSON),
 	}
 	header.Authorization = header.CreateSignature(c.rCfg.AccessKeySecret)
 
 	result := BaseResp{}
 	resp, err := resty.New().R().
 		SetHeaders(header.ToMap()).
-		SetBody(reqJson).
+		SetBody(reqJSON).
 		SetResult(&result).
 		Post(c.rCfg.OpenPlatformHttpHost + reqPath)
 
 	if err != nil {
-		return nil, errors.Wrapf(err, "request fail, url:%s body: %s", reqPath, reqJson)
+		return nil, errors.Wrapf(err, "request fail, url:%s body: %s", reqPath, reqJSON)
 	}
 
 	if resp.StatusCode() >= http.StatusBadRequest {
-		return nil, errors.Wrapf(BilibiliRequestFailed, "request response not ok, url:%s req: %v code:%d", reqPath, reqJson, resp.StatusCode())
+		return nil, errors.Wrapf(BilibiliRequestFailed, "request response not ok, url:%s req: %v code:%d", reqPath, reqJSON, resp.StatusCode())
 	}
 
 	if !result.Success() {
-		return &result, errors.Wrapf(BilibiliResponseNotSuccess, "bilbil response code not ok, url:%s  body: %s result: %v", reqPath, reqJson, result)
+		return &result, errors.Wrapf(BilibiliResponseNotSuccess, "bilbil response code not ok, url:%s  body: %s result: %v", reqPath, reqJSON, result)
 	}
 
 	return &result, nil

@@ -24,8 +24,6 @@
 package openhome
 
 import (
-	"net/http"
-
 	"github.com/go-resty/resty/v2"
 	"github.com/pkg/errors"
 )
@@ -52,12 +50,8 @@ func (u *User) GetAccountScopes(accessToken string) (*AccountScopesResp, error) 
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*AccountScopesResp), nil
@@ -84,12 +78,8 @@ func (u *User) GetAccountInfo(accessToken string) (*AccountInfoResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*AccountInfoResp), nil

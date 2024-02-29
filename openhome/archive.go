@@ -26,7 +26,6 @@ package openhome
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -66,16 +65,11 @@ func (a *Archive) Edit(accessToken string, req ArchiveEditReq) (*ArchiveEditResp
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveEditResp), nil
-
 }
 
 func (a *Archive) Delete(accessToken, resourceID string) error {
@@ -97,12 +91,8 @@ func (a *Archive) Delete(accessToken, resourceID string) error {
 		return errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return err
 	}
 
 	return nil
@@ -150,12 +140,8 @@ func (a *Archive) View(accessToken, resourceID string) (*ArchiveViewResp, error)
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveViewResp), nil
@@ -202,12 +188,8 @@ func (a *Archive) ViewList(accessToken string, req ArchiveViewListReq) (*Archive
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveViewListResp), nil
@@ -241,12 +223,8 @@ func (a *Archive) TypeList(accessToken string) (*ArchiveTypeListResp, error) {
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveTypeListResp), nil
@@ -295,12 +273,8 @@ func (a *Archive) UploadInit(accessToken string, req UploadInitReq) (*UploadInit
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*UploadInitResp), nil
@@ -323,12 +297,8 @@ func (a *Archive) UploadPart(uploadToken string, partNumber int, fileReader io.R
 		return errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return err
 	}
 
 	return nil
@@ -349,14 +319,9 @@ func (a *Archive) UploadComplete(uploadToken string) error {
 		return errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("read response fail, resp: %v", resp)
+	if err = checkResp(resp, result); err != nil {
+		return err
 	}
-
-	if !result.IsSuccess() {
-		return errors.Errorf("request fail: %d %s", result.Code, result.Message)
-	}
-
 	return nil
 }
 
@@ -400,12 +365,8 @@ func (a *Archive) Submit(accessToken, uploadToken string, req ArchiveSubmitReq) 
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveSubmitResp), nil
@@ -432,12 +393,8 @@ func (a *Archive) UploadCover(accessToken string, fileReader io.Reader) (*Archiv
 		return nil, errors.Wrapf(err, "do request fail")
 	}
 
-	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("read response fail, resp: %v", resp)
-	}
-
-	if !result.IsSuccess() {
-		return nil, errors.Errorf("request fail: %d %s", result.Code, result.Message)
+	if err = checkResp(resp, result); err != nil {
+		return nil, err
 	}
 
 	return result.Data.(*ArchiveUploadCoverResp), nil
