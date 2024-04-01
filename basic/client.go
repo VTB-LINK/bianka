@@ -24,6 +24,7 @@
 package basic
 
 import (
+	"context"
 	"os"
 	"sync"
 	"time"
@@ -84,8 +85,7 @@ type WsClient struct {
 
 	closeWait sync.WaitGroup
 	once      *sync.Once
-	closeChan chan struct{}
-	isClosed  bool
+	cancel    context.CancelFunc
 }
 
 func NewWsClient(startResp StartResp, dispatcherHandleMap DispatcherHandleMap, logger *slog.Logger) *WsClient {
@@ -97,7 +97,6 @@ func NewWsClient(startResp StartResp, dispatcherHandleMap DispatcherHandleMap, l
 
 		closeWait: sync.WaitGroup{},
 		once:      &sync.Once{},
-		closeChan: make(chan struct{}),
 	}).initDispatcherHandleMap(dispatcherHandleMap)
 }
 
@@ -124,10 +123,8 @@ func (wsClient *WsClient) initDispatcherHandleMap(dispatcherHandleMap Dispatcher
 		proto.OperationHeartbeatReply:          heartBeatResp,
 	}
 
-	if dispatcherHandleMap != nil {
-		for op, handle := range dispatcherHandleMap {
-			wsClient.dispatcher.Set(op, handle)
-		}
+	for op, handle := range dispatcherHandleMap {
+		wsClient.dispatcher.Set(op, handle)
 	}
 
 	return wsClient
@@ -142,18 +139,21 @@ func (wsClient *WsClient) CloseWithType(t int) (err error) {
 	_ = wsClient.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	wsClient.once.Do(func() {
-		close(wsClient.closeChan)
-		wsClient.isClosed = true
+		wsClient.cancel()
 
 		// 等待事件处理完毕
 		wsClient.closeWait.Wait()
 		err = wsClient.conn.Close()
 
+		// 关闭回调
 		if wsClient.onClose != nil {
 			wsClient.onClose(wsClient, wsClient.startResp, t)
 		}
 	})
 
+	if err != nil {
+		wsClient.logger.Error("close fail", slog.String("err", err.Error()))
+	}
 	return err
 }
 
@@ -177,8 +177,7 @@ func (wsClient *WsClient) Reset() {
 	wsClient.closeWait = sync.WaitGroup{}
 	wsClient.once = &sync.Once{}
 	wsClient.authed = false
-	wsClient.isClosed = false
-	wsClient.closeChan = make(chan struct{})
+	wsClient.cancel = nil
 }
 
 // Dial 链接
@@ -202,7 +201,7 @@ func (wsClient *WsClient) Dial(links ...string) error {
 }
 
 // eventLoop 处理事件
-func (wsClient *WsClient) eventLoop() {
+func (wsClient *WsClient) eventLoop(ctx context.Context) {
 	wsClient.logger.Info("ws event loop start")
 	wsClient.closeWait.Add(1)
 
@@ -211,18 +210,19 @@ func (wsClient *WsClient) eventLoop() {
 		wsClient.closeWait.Done()
 	}()
 
-	ticker := time.NewTicker(time.Second * 15)
-	tr := time.NewTimer(time.Second * 10)
+	heartbeatTicker := time.NewTicker(time.Second * 15)
+	authTimer := time.NewTimer(time.Second * 10)
 	for {
 		select {
-		case <-wsClient.closeChan:
+		case <-ctx.Done():
 			return
-		case <-tr.C:
+		case <-authTimer.C:
 			if !wsClient.authed {
 				wsClient.logger.Error("auth timeout")
+				go wsClient.CloseWithType(CloseAuthFailed)
 				return
 			}
-		case <-ticker.C:
+		case <-heartbeatTicker.C:
 			wsClient.logger.Debug("ws send heartbeat")
 			if err := wsClient.SendHeartbeat(); err != nil {
 				wsClient.logger.Error("send heartbeat fail", slog.String("err", err.Error()))
@@ -241,7 +241,7 @@ func (wsClient *WsClient) eventLoop() {
 	}
 }
 
-func (wsClient *WsClient) readMessage() {
+func (wsClient *WsClient) readMessage(ctx context.Context) {
 	wsClient.logger.Info("ws read message start")
 	wsClient.closeWait.Add(1)
 
@@ -250,42 +250,56 @@ func (wsClient *WsClient) readMessage() {
 		wsClient.closeWait.Done()
 	}()
 
+	// 如果发生读取错误, 先跳出循环, 尝试select ctx.Done() 如果ctx.Done()触发, 则说明的正常关闭
+	// 否则, 说明是读取错误, 需要关闭链接
+	var isReadingErr error
 	for {
-		// 读取err or read close message 会导致关闭链接
-		msgType, buf, err := wsClient.conn.ReadMessage()
-
-		if err != nil {
-			if !wsClient.isClosed {
-				wsClient.logger.Error("read message fail", slog.String("err", errors.Wrapf(err, "msg_type:%d", msgType).Error()))
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if isReadingErr != nil {
+				wsClient.logger.Error("read message fail", slog.String("err", errors.Wrap(isReadingErr, "read message fail").Error()))
 				go wsClient.CloseWithType(CloseReadingConnError)
+				return
 			}
-			return
-		} else if msgType == websocket.CloseMessage {
-			wsClient.logger.Info("received shutdown message", slog.Int("msg_type", msgType))
-			go wsClient.CloseWithType(CloseReceivedShutdownMessage)
-			return
-		} else if msgType == websocket.PongMessage || msgType == websocket.PingMessage {
-			wsClient.logger.Debug("read message", slog.String("msg_type", "ping/pong"))
-			continue
-		}
 
-		msgList, err := proto.UnpackMessage(buf)
-		if err != nil {
-			wsClient.logger.Error("unpack message fail", slog.String("err", err.Error()))
-			continue
-		}
+			// 读取err or read close message 会导致关闭链接
+			msgType, buf, err := wsClient.conn.ReadMessage()
+			switch {
+			case err != nil:
+				isReadingErr = err
+				continue
+			case msgType == websocket.PongMessage || msgType == websocket.PingMessage:
+				wsClient.logger.Debug("read message", slog.String("msg_type", "ping/pong"))
+				continue
+			case msgType == websocket.CloseMessage:
+				wsClient.logger.Info("received shutdown message", slog.Int("msg_type", msgType))
+				go wsClient.CloseWithType(CloseReceivedShutdownMessage)
+				return
+			default:
+				msgList, err := proto.UnpackMessage(buf)
+				if err != nil {
+					wsClient.logger.Error("unpack message fail", slog.String("err", err.Error()))
+					continue
+				}
 
-		for _, msg := range msgList {
-			wsClient.msgChan <- &msg
+				for i := 0; i < len(msgList); i++ {
+					wsClient.msgChan <- &msgList[i]
+				}
+			}
 		}
 	}
 }
 
 func (wsClient *WsClient) Run() {
+	ctx, cancel := context.WithCancel(context.Background())
+	wsClient.cancel = cancel
+
 	// 读取信息
-	go wsClient.readMessage()
+	go wsClient.readMessage(ctx)
 	// 处理事件
-	go wsClient.eventLoop()
+	go wsClient.eventLoop(ctx)
 }
 
 // SendMessage 发送消息
@@ -361,7 +375,7 @@ func authResp(wsClient *WsClient, msg *proto.Message) error {
 }
 
 // heartBeatResp  心跳结果
-func heartBeatResp(wsClient *WsClient, msg *proto.Message) (err error) {
+func heartBeatResp(wsClient *WsClient, _ *proto.Message) (err error) {
 	wsClient.Logger().Debug("heartbeat success")
 	return
 }
