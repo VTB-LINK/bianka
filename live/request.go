@@ -120,9 +120,15 @@ func (c *Client) AppHeartbeat(gameID string) error {
 		return errors.Wrap(err, "json marshal fail")
 	}
 
-	_, err = c.doRequest(string(reqJSON), "/v2/app/heartbeat")
+	respBody, err := c.doRequest(string(reqJSON), "/v2/app/heartbeat")
 	if err != nil {
-		return errors.WithMessage(err, "heartbeat fail")
+		return errors.Wrap(err, "heartbeat fail")
+	}
+
+	// 直接检查respBody的Code属性
+	if respBody.Code != 0 {
+		// 当Code不为0时返回错误
+		return errors.Errorf("heartbeat fail with code %d and message %s", respBody.Code, respBody.Message)
 	}
 
 	return nil
