@@ -30,12 +30,16 @@ import (
 )
 
 const (
-	CmdLiveOpenPlatformDanmu        = "LIVE_OPEN_PLATFORM_DM"             // 弹幕
-	CmdLiveOpenPlatformSendGift     = "LIVE_OPEN_PLATFORM_SEND_GIFT"      // 礼物
-	CmdLiveOpenPlatformSuperChat    = "LIVE_OPEN_PLATFORM_SUPER_CHAT"     // SC
-	CmdLiveOpenPlatformSuperChatDel = "LIVE_OPEN_PLATFORM_SUPER_CHAT_DEL" // SC删除
-	CmdLiveOpenPlatformGuard        = "LIVE_OPEN_PLATFORM_GUARD"          // 付费大航海
-	CmdLiveOpenPlatformLike         = "LIVE_OPEN_PLATFORM_LIKE"           // 点赞
+	CmdLiveOpenPlatformDanmu        = "LIVE_OPEN_PLATFORM_DM"              // 弹幕
+	CmdLiveOpenPlatformSendGift     = "LIVE_OPEN_PLATFORM_SEND_GIFT"       // 礼物
+	CmdLiveOpenPlatformSuperChat    = "LIVE_OPEN_PLATFORM_SUPER_CHAT"      // SC
+	CmdLiveOpenPlatformSuperChatDel = "LIVE_OPEN_PLATFORM_SUPER_CHAT_DEL"  // SC删除
+	CmdLiveOpenPlatformGuard        = "LIVE_OPEN_PLATFORM_GUARD"           // 付费大航海
+	CmdLiveOpenPlatformLike         = "LIVE_OPEN_PLATFORM_LIKE"            // 点赞
+	CmdLiveOpenPlatformRoomEnter    = "LIVE_OPEN_PLATFORM_LIVE_ROOM_ENTER" // 进入房间
+	CmdLiveOpenPlatformLiveStart    = "LIVE_OPEN_PLATFORM_LIVE_START"      // 开始直播
+	CmdLiveOpenPlatformLiveEnd      = "LIVE_OPEN_PLATFORM_LIVE_END"        // 结束直播
+	// CmdLiveOpenPlatformInteractionEnd = "LIVE_OPEN_PLATFORM_INTERACTION_END" // 消息推送结束通知
 
 	CmdLiveRoomDanmu        = "OPEN_LIVEROOM_DM"             // 弹幕
 	CmdLiveRoomSendGift     = "OPEN_LIVEROOM_SEND_GIFT"      // 礼物
@@ -72,6 +76,12 @@ func AutomaticParsingMessageCommand(payload []byte) (string, interface{}, error)
 		data = &CmdGuardData{}
 	case CmdLiveOpenPlatformLike, CmdLiveRoomLike:
 		data = &CmdLikeData{}
+	case CmdLiveOpenPlatformRoomEnter:
+		data = &CmdLiveRoomEnterData{}
+	case CmdLiveOpenPlatformLiveStart:
+		data = &CmdLiveStartData{}
+	case CmdLiveOpenPlatformLiveEnd:
+		data = &CmdLiveEndData{}
 	default:
 		data = map[string]interface{}{}
 	}
@@ -199,6 +209,40 @@ type CmdLikeData struct {
 	FansMedalLevel         int    `json:"fans_medal_level"`
 	MsgID                  string `json:"msg_id"`
 	RoomID                 int    `json:"room_id"`
+}
+
+// CmdLiveRoomEnterData 进入房间数据
+type CmdLiveRoomEnterData struct {
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 用户头像
+	Uface string `json:"uface"`
+	// 用户昵称
+	Uname string `json:"uname"`
+	// 用户唯一标识
+	OpenID string `json:"open_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
+}
+
+// CmdLiveStartData 开始直播数据
+type CmdLiveStartData struct {
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 用户唯一标识
+	OpenID string `json:"open_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
+}
+
+// CmdLiveEndData 结束直播数据
+type CmdLiveEndData struct {
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 用户唯一标识
+	OpenID string `json:"open_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
 }
 
 // CmdAuthData 鉴权数据
