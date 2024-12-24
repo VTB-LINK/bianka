@@ -127,6 +127,7 @@ type CmdSendGiftData struct {
 	GiftName               string `json:"gift_name"`
 	GiftNum                int    `json:"gift_num"`
 	Price                  int    `json:"price"`
+	RPrice                 int    `json:"r_price"`
 	Paid                   bool   `json:"paid"`
 	FansMedalLevel         int    `json:"fans_medal_level"`
 	FansMedalName          string `json:"fans_medal_name"`
@@ -188,6 +189,7 @@ type CmdGuardData struct {
 	GuardLevel             int    `json:"guard_level"`
 	GuardNum               int    `json:"guard_num"`
 	GuardUnit              string `json:"guard_unit"`
+	Price                  int    `json:"price"`
 	FansMedalLevel         int    `json:"fans_medal_level"`
 	FansMedalName          string `json:"fans_medal_name"`
 	FansMedalWearingStatus bool   `json:"fans_medal_wearing_status"`
@@ -204,6 +206,7 @@ type CmdLikeData struct {
 	Uface                  string `json:"uface"`
 	Timestamp              int    `json:"timestamp"`
 	LikeText               string `json:"like_text"`
+	LikeCount              int    `json:"like_count"`
 	FansMedalWearingStatus bool   `json:"fans_medal_wearing_status"`
 	FansMedalName          string `json:"fans_medal_name"`
 	FansMedalLevel         int    `json:"fans_medal_level"`
@@ -233,6 +236,10 @@ type CmdLiveStartData struct {
 	OpenID string `json:"open_id"`
 	// 发生的时间戳
 	Timestamp int64 `json:"timestamp"`
+	// 开播二级分区ID
+	AreaID int64 `json:"area_id"`
+	// 开播时刻，直播间的标题
+	Title string `json:"title"`
 }
 
 // CmdLiveEndData 结束直播数据
@@ -243,6 +250,10 @@ type CmdLiveEndData struct {
 	OpenID string `json:"open_id"`
 	// 发生的时间戳
 	Timestamp int64 `json:"timestamp"`
+	// 开播二级分区ID
+	AreaID int64 `json:"area_id"`
+	// 开播时刻，直播间的标题
+	Title string `json:"title"`
 }
 
 // CmdAuthData 鉴权数据
