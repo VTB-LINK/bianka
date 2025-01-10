@@ -41,12 +41,20 @@ const (
 	CmdLiveOpenPlatformLiveEnd      = "LIVE_OPEN_PLATFORM_LIVE_END"        // 结束直播
 	// CmdLiveOpenPlatformInteractionEnd = "LIVE_OPEN_PLATFORM_INTERACTION_END" // 消息推送结束通知
 
-	CmdLiveRoomDanmu        = "OPEN_LIVEROOM_DM"             // 弹幕
-	CmdLiveRoomSendGift     = "OPEN_LIVEROOM_SEND_GIFT"      // 礼物
-	CmdLiveRoomSuperChat    = "OPEN_LIVEROOM_SUPER_CHAT"     // SC
-	CmdLiveRoomSuperChatDel = "OPEN_LIVEROOM_SUPER_CHAT_DEL" // SC删除
-	CmdLiveRoomSuperGuard   = "OPEN_LIVEROOM_GUARD"          // 付费大航海
-	CmdLiveRoomLike         = "OPEN_LIVEROOM_LIKE"           // 点赞
+	CmdLiveRoomDanmu         = "OPEN_LIVEROOM_DM"              // 弹幕
+	CmdLiveRoomSendGift      = "OPEN_LIVEROOM_SEND_GIFT"       // 礼物
+	CmdLiveRoomSuperChat     = "OPEN_LIVEROOM_SUPER_CHAT"      // SC
+	CmdLiveRoomSuperChatDel  = "OPEN_LIVEROOM_SUPER_CHAT_DEL"  // SC删除
+	CmdLiveRoomSuperGuard    = "OPEN_LIVEROOM_GUARD"           // 付费大航海
+	CmdLiveRoomLike          = "OPEN_LIVEROOM_LIKE"            // 点赞
+	CmdLiveRoomLiveRoomEnter = "OPEN_LIVEROOM_LIVE_ROOM_ENTER" // 进入房间
+	CmdLiveRoomLiveStart     = "OPEN_LIVEROOM_LIVE_START"      // 开始直播
+	CmdLiveRoomLiveEnd       = "OPEN_LIVEROOM_LIVE_END"        // 结束直播
+	CmdLiveRoomRoomChange    = "OPEN_LIVEROOM_ROOM_CHANGE"     // 直播间基础信息更新
+	CmdLiveRoomRoomBlockMsg  = "OPEN_LIVEROOM_ROOM_BLOCK_MSG"  // 用户禁言通知
+	CmdLiveRoomInteractWord  = "OPEN_LIVEROOM_INTERACT_WORD"   // 用户关注通知
+	CmdLiveRoomWarning       = "OPEN_LIVEROOM_WARNING"         // 直播间警告信息
+	//CmdLiveRoomInteractionEnd = "OPEN_LIVEROOM_INTERACTION_END" // 消息推送结束通知
 )
 
 // AutomaticParsingMessageCommand 自动解析消息命令
@@ -76,12 +84,20 @@ func AutomaticParsingMessageCommand(payload []byte) (string, interface{}, error)
 		data = &CmdGuardData{}
 	case CmdLiveOpenPlatformLike, CmdLiveRoomLike:
 		data = &CmdLikeData{}
-	case CmdLiveOpenPlatformRoomEnter:
+	case CmdLiveOpenPlatformRoomEnter, CmdLiveRoomLiveRoomEnter:
 		data = &CmdLiveRoomEnterData{}
-	case CmdLiveOpenPlatformLiveStart:
+	case CmdLiveOpenPlatformLiveStart, CmdLiveRoomLiveStart:
 		data = &CmdLiveStartData{}
-	case CmdLiveOpenPlatformLiveEnd:
+	case CmdLiveOpenPlatformLiveEnd, CmdLiveRoomLiveEnd:
 		data = &CmdLiveEndData{}
+	case CmdLiveRoomRoomChange:
+		data = &CmdRoomChangeData{}
+	case CmdLiveRoomRoomBlockMsg:
+		data = &CmdRoomBlockMsgData{}
+	case CmdLiveRoomInteractWord:
+		data = &CmdInteractWordData{}
+	case CmdLiveRoomWarning:
+		data = &CmdWarningData{}
 	default:
 		data = map[string]interface{}{}
 	}
@@ -236,8 +252,8 @@ type CmdLiveStartData struct {
 	OpenID string `json:"open_id"`
 	// 发生的时间戳
 	Timestamp int64 `json:"timestamp"`
-	// 开播二级分区ID
-	AreaID int64 `json:"area_id"`
+	// 开播二级分区名称
+	AreaName string `json:"area_name"`
 	// 开播时刻，直播间的标题
 	Title string `json:"title"`
 }
@@ -250,10 +266,74 @@ type CmdLiveEndData struct {
 	OpenID string `json:"open_id"`
 	// 发生的时间戳
 	Timestamp int64 `json:"timestamp"`
-	// 开播二级分区ID
-	AreaID int64 `json:"area_id"`
+	// 开播二级分区名称
+	AreaName string `json:"area_name"`
 	// 开播时刻，直播间的标题
 	Title string `json:"title"`
+}
+
+// CmdRoomChangeData 直播间基础信息变化数据
+type CmdRoomChangeData struct {
+	// 开播二级分区名称
+	AreaName string `json:"area_name"`
+	// 推送消息的唯一ID
+	MsgID string `json:"msg_id"`
+	// 开播一级分区名称
+	ParentAreaName string `json:"parent_area_name"`
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
+	// 直播间的标题
+	Title string `json:"title"`
+}
+
+// CmdRoomBlockMsgData 用户禁言通知数据
+type CmdRoomBlockMsgData struct {
+	// 禁言结束时间戳(UTC+8，秒)
+	BlockExpired int64 `json:"block_expired"`
+	// 推送消息的唯一ID
+	MsgID string `json:"msg_id"`
+	// 用户唯一标识
+	OpenID string `json:"open_id"`
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 用户昵称
+	Uname string `json:"uname"`
+}
+
+// CmdInteractWordData 用户关注通知数据
+type CmdInteractWordData struct {
+	// 推送消息的唯一ID
+	MsgID string `json:"msg_id"`
+	// 用户唯一标识
+	OpenID string `json:"open_id"`
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
+	// 用户昵称
+	Uname string `json:"uname"`
+}
+
+// CmdWarningData 直播间警告信息数据
+type CmdWarningData struct {
+	// 警告信息内容
+	Msg string `json:"msg"`
+	// 推送消息的唯一ID
+	MsgID string `json:"msg_id"`
+	// 发生的直播间
+	RoomID int64 `json:"room_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
+}
+
+// CmdInteractionEndData 消息推送结束通知数据
+type CmdInteractionEndData struct {
+	// 结束消息推送的conn_id
+	ConnID string `json:"conn_id"`
+	// 发生的时间戳
+	Timestamp int64 `json:"timestamp"`
 }
 
 // CmdAuthData 鉴权数据
