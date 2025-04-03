@@ -51,7 +51,19 @@ type OAuthGenerator struct {
 	mobileUI    bool   // 移动端UI 默认pc
 	callbackURL string // 回调地址
 	state       string // 防CSRF攻击
+
+	navHide      string // 顶部导航栏样式，可取值0和1，0为系统默认，1为授权默认样式，如果没有特定需求取值1即可
+	callbackType string // 授权成功后的操作，可取值skip、close、browser
 }
+
+const (
+	NavHideSystemDefault = "0" // 系统默认
+	NavHideOAuthDefault  = "1" // 授权默认
+
+	CallbackTypeSkip    = "skip"    // 授权成功后跳转到gourl页面
+	CallbackTypeClose   = "close"   // 授权成功后关闭webview
+	CallbackTypeBrowser = "browser" // 打开浏览器gourl页面
+)
 
 func (og *OAuthGenerator) GetState() string {
 	return og.state
@@ -72,23 +84,72 @@ func (og *OAuthGenerator) WithState(state string) *OAuthGenerator {
 	return og
 }
 
+func (og *OAuthGenerator) WithNavHide(navHide string) *OAuthGenerator {
+	og.navHide = navHide
+	return og
+}
+
+func (og *OAuthGenerator) getNavHide() string {
+	if og.navHide == "" {
+		og.WithNavHideSystemDefault()
+	}
+	return og.navHide
+}
+
+func (og *OAuthGenerator) WithNavHideSystemDefault() *OAuthGenerator {
+	return og.WithNavHide(NavHideSystemDefault)
+}
+
+func (og *OAuthGenerator) WithNavHideOAuthDefault() *OAuthGenerator {
+	return og.WithNavHide(NavHideOAuthDefault)
+}
+
+func (og *OAuthGenerator) getCallbackType() string {
+	if og.callbackType == "" {
+		og.WithCallbackTypeSkip()
+	}
+	return og.callbackType
+}
+
+func (og *OAuthGenerator) WithCallbackType(callbackType string) *OAuthGenerator {
+	og.callbackType = callbackType
+	return og
+}
+
+func (og *OAuthGenerator) WithCallbackTypeSkip() *OAuthGenerator {
+	return og.WithNavHide(CallbackTypeSkip)
+}
+
+func (og *OAuthGenerator) WithCallbackTypeClose() *OAuthGenerator {
+	return og.WithNavHide(CallbackTypeClose)
+}
+
+func (og *OAuthGenerator) WithCallbackTypeBrowser() *OAuthGenerator {
+	return og.WithNavHide(CallbackTypeBrowser)
+}
+
 func (og *OAuthGenerator) GenerateAuthorizationURL() string {
 	if og.state == "" {
 		og.state = strconv.Itoa(_random.Intn(1000000) + 1000000)
 	}
 
-	basicURL := "https://passport.bilibili.com/register/pc_oauth2.html#/?"
+	params := url.Values{}
+
+	basicURL := "https://account.bilibili.com/pc/account-pc/auth/oauth"
 	if og.mobileUI {
-		basicURL = "https://passport.bilibili.com/register/oauth2.html#/?"
+		basicURL = "https://account.bilibili.com/h5/account-h5/auth/oauth"
+		params.Add("navhide", og.getNavHide())
+		params.Add("callback", og.getCallbackType())
 	}
 
-	params := url.Values{}
 	params.Add("client_id", og.clientID)
-	params.Add("return_url", og.callbackURL)
+	params.Add("gourl", og.callbackURL)
 	params.Add("response_type", "code")
 	params.Add("state", og.state)
 
-	return basicURL + params.Encode()
+	_u, _ := url.Parse(basicURL)
+	_u.RawQuery = params.Encode()
+	return _u.String()
 }
 
 type OAuth basicService
