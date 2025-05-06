@@ -136,9 +136,9 @@ func (wsClient *WsClient) Close() error {
 
 func (wsClient *WsClient) CloseWithType(t int) (err error) {
 	wsClient.logger.Info("ws client close", slog.Int("close_type", t))
-	_ = wsClient.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 
 	wsClient.once.Do(func() {
+		_ = wsClient.conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		wsClient.cancel()
 
 		// 等待事件处理完毕

@@ -104,8 +104,6 @@ func messageHandle(wcs *basic.WsClient, msg *proto.Message) error {
 	// 单条消息raw
 	log.Println(string(msg.Payload()))
 
-	fs.WriteString(string(msg.Payload()) + "\n")
-
 	//// 自动解析
 	//cmd, data, err := proto.AutomaticParsingMessageCommand(msg.Payload())
 	//if err != nil {
